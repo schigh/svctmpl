@@ -2,8 +2,7 @@
 
 This is my opinionated template for Go microservices.
 
-| :warning: WARNING: This is very much a work in progress, which I will continue to update as time permits. |
-| For those watching this repo, please be sure to pay attention to the github updates as they roll out. I made the decision to put this out in a _very_ incomplete state, because I feel that the evolution of a service from nothing to fully-formed is just as important as the service itself. |
+| :warning: WARNING: This is very much a work in progress, which I will continue to update as time permits. For those watching this repo, please be sure to pay attention to the github updates as they roll out. I made the decision to put this out in a _very_ incomplete state, because I feel that the evolution of a service from nothing to fully-formed is just as important as the service itself. |
 | --- |
 
 The purpose of this repo? I've been writing services in Go for a _long_ time, and I've seen many permutations and 
