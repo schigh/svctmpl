@@ -8,8 +8,10 @@ import (
 	"syscall"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/schigh/svctmpl/internal/config"
+	"github.com/schigh/svctmpl/internal/log"
 )
 
 func main() {
@@ -30,8 +32,9 @@ func main() {
 
 	// bootstrap dependencies
 	// Each of these bootstrapping functions returns a closure that will be invoked when the service is shutting down.
+	// Any unrecoverable errors encountered during bootstrapping will panic
 	closers := []func(ctx context.Context){
-		bootstrapLogging(ctx, cfg.Log),       // logging
+		bootstrapLogging(ctx, cfg.Service),   // logging
 		bootstrapDatabase(ctx, cfg.Database), // postgres
 		bootstrapGRPC(ctx, cfg.GRPC),         // gRPC server
 		bootstrapHTTP(ctx, cfg.HTTP),         // HTTP server
@@ -41,25 +44,39 @@ func main() {
 	slices.Reverse(closers)
 
 	// TODO: context logger
-	zap.L().Info("starting server")
+	log.Ctx(ctx).Info("starting service")
 
 	// block until shutdown signal
 	<-ctx.Done()
-	zap.L().Info("shutting down server")
+	log.Ctx(ctx).Info("shutting down")
 	for _, closer := range closers {
 		closer(ctx)
 	}
 }
 
+func shutdown(ctx context.Context) {
+	log.Ctx(ctx).Info("shutting down")
+}
+
+// Lightweight bootstrapping functions.
+// These might be a little too lightweight for some service implementations, but the gist of these functions is the same
+// no matter where they live. Each function returns a closer function that can be invoked when the application is
+// shutting down.
+// Any long-lived dependencies must be declared outside of these functions to maintain proper ownership and lifecycle.
+
+// main service
 func bootstrapService(ctx context.Context, cfg config.Service) func(ctx context.Context) {
 	return func(ctx context.Context) {}
 }
 
-// Lightweight bootstrapping functions.
-// These might be a little too lightweight for some service implementations, but the gist of these functions is the same no matter where they live. Each function returns
-func bootstrapLogging(_ context.Context, cfg config.Log) func(context.Context) {
+// logging
+func bootstrapLogging(_ context.Context, cfg config.Service) func(context.Context) {
 	zCfg := zap.NewProductionConfig()
-	zCfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+	ll, err := zapcore.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		panic(err)
+	}
+	zCfg.Level = zap.NewAtomicLevelAt(ll)
 	logger, err := zap.NewProductionConfig().Build()
 	if err != nil {
 		panic(err)
@@ -70,14 +87,17 @@ func bootstrapLogging(_ context.Context, cfg config.Log) func(context.Context) {
 	}
 }
 
+// database
 func bootstrapDatabase(_ context.Context, cfg config.Database) func(ctx context.Context) {
 	return func(ctx context.Context) {}
 }
 
+// gRPC server
 func bootstrapGRPC(_ context.Context, cfg config.GRPC) func(ctx context.Context) {
 	return func(ctx context.Context) {}
 }
 
+// HTTP server
 func bootstrapHTTP(_ context.Context, cfg config.HTTP) func(ctx context.Context) {
 	return func(ctx context.Context) {}
 }

@@ -15,7 +15,6 @@ func SetPrefix(prefix string) {
 // Config holds the application configuration settings.
 type Config struct {
 	Service  Service
-	Log      Log
 	Database Database
 	HTTP     HTTP
 	GRPC     GRPC
@@ -23,12 +22,9 @@ type Config struct {
 
 // Service holds configuration settings for the application service.
 type Service struct {
-	Name    string `envconfig:"SERVICE_NAME" required:"true"`
-	Version string `envconfig:"SERVICE_VERSION" default:"0.0.0-dev"`
-}
-
-type Log struct {
-	Level string `envconfig:"LOG_LEVEL" default:"info"`
+	Name     string `envconfig:"SERVICE_NAME" required:"true"`
+	Version  string `envconfig:"SERVICE_VERSION" default:"0.0.0-dev"`
+	LogLevel string `envconfig:"SERVICE_LOG_LEVEL" default:"info"`
 }
 
 // Database holds the configuration for connecting to a database.

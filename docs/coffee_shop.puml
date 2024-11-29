@@ -1,0 +1,14 @@
+@startuml
+
+entity customer {
+    * id : UUID
+    --
+    * name : STRING
+    * email : STRING
+    * phone : STRING
+    loyalty_points : INT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+@enduml
