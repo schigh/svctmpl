@@ -11,17 +11,17 @@ import (
 // prefixed with SERVICE_.
 type Config struct {
 	Service  ServiceConfig
-	Database DatabaseConfig
-	HTTP     HTTPConfig
-	OTel     OTelConfig
-}
+[[ if .HasDatabase ]]	Database DatabaseConfig
+[[ end ]]	HTTP     HTTPConfig
+[[ if .HasOTel ]]	OTel     OTelConfig
+[[ end ]]}
 
 // ServiceConfig identifies the running service and its environment.
 type ServiceConfig struct {
 	Name        string `envconfig:"SERVICE_NAME" default:"[[ .ProjectName ]]"`
 	Environment string `envconfig:"SERVICE_ENV" default:"dev"`
 }
-
+[[ if .HasDatabase ]]
 // DatabaseConfig holds PostgreSQL connection parameters.
 type DatabaseConfig struct {
 	Host     string `envconfig:"DB_HOST" default:"localhost"`
@@ -40,7 +40,7 @@ func (d DatabaseConfig) DSN() string {
 		d.User, d.Password, d.Host, d.Port, d.DBName, d.SSLMode,
 	)
 }
-
+[[ end ]]
 // HTTPConfig controls the HTTP listener.
 type HTTPConfig struct {
 	Port         int           `envconfig:"HTTP_PORT" default:"8080"`
@@ -53,7 +53,7 @@ type HTTPConfig struct {
 func (h HTTPConfig) Addr() string {
 	return fmt.Sprintf(":%d", h.Port)
 }
-
+[[ if .HasOTel ]]
 // OTelConfig controls OpenTelemetry instrumentation.
 type OTelConfig struct {
 	Enabled     bool   `envconfig:"OTEL_ENABLED" default:"false"`
@@ -65,7 +65,7 @@ type OTelConfig struct {
 func (o OTelConfig) MetricsAddr() string {
 	return fmt.Sprintf(":%d", o.MetricsPort)
 }
-
+[[ end ]]
 // Load reads configuration from environment variables. The prefix is empty
 // because each field specifies its own envconfig key.
 func Load() (Config, error) {
@@ -73,14 +73,14 @@ func Load() (Config, error) {
 	if err := envconfig.Process("", &cfg.Service); err != nil {
 		return cfg, fmt.Errorf("loading service config: %w", err)
 	}
-	if err := envconfig.Process("", &cfg.Database); err != nil {
+[[ if .HasDatabase ]]	if err := envconfig.Process("", &cfg.Database); err != nil {
 		return cfg, fmt.Errorf("loading database config: %w", err)
 	}
-	if err := envconfig.Process("", &cfg.HTTP); err != nil {
+[[ end ]]	if err := envconfig.Process("", &cfg.HTTP); err != nil {
 		return cfg, fmt.Errorf("loading http config: %w", err)
 	}
-	if err := envconfig.Process("", &cfg.OTel); err != nil {
+[[ if .HasOTel ]]	if err := envconfig.Process("", &cfg.OTel); err != nil {
 		return cfg, fmt.Errorf("loading otel config: %w", err)
 	}
-	return cfg, nil
+[[ end ]]	return cfg, nil
 }

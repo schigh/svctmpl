@@ -1,42 +1,45 @@
-package handler_test
+package http_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
-	"github.com/example/myservice/internal/handler"
-	"github.com/example/myservice/internal/repository"
+	"github.com/example/myservice/internal/errs"
+	"github.com/example/myservice/internal/model"
+	transporthttp "github.com/example/myservice/internal/transport/http"
 )
 
-// memRepo is a thread-safe in-memory implementation of repository.ResourceRepository
-// for handler-level tests.
-type memRepo struct {
+// memService is a thread-safe in-memory implementation of the Service
+// interface for transport-level tests.
+type memService struct {
 	mu    sync.RWMutex
-	items map[string]repository.Resource
+	items map[string]*model.Resource
 	seq   int
 }
 
-func newMemRepo() *memRepo {
-	return &memRepo{items: make(map[string]repository.Resource)}
+func newMemService() *memService {
+	return &memService{items: make(map[string]*model.Resource)}
 }
 
-func (m *memRepo) Create(_ context.Context, name, description string) (repository.Resource, error) {
+func (m *memService) CreateResource(_ context.Context, name, description string) (*model.Resource, error) {
+	if name == "" {
+		return nil, fmt.Errorf("%w: name is required", errs.ErrInvalid)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.seq++
 	id := fmt.Sprintf("00000000-0000-0000-0000-%012d", m.seq)
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	res := repository.Resource{
+	res := &model.Resource{
 		ID:          id,
 		Name:        name,
 		Description: description,
@@ -47,66 +50,66 @@ func (m *memRepo) Create(_ context.Context, name, description string) (repositor
 	return res, nil
 }
 
-func (m *memRepo) GetByID(_ context.Context, id string) (repository.Resource, error) {
+func (m *memService) GetResource(_ context.Context, id string) (*model.Resource, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	res, ok := m.items[id]
 	if !ok {
-		return repository.Resource{}, repository.ErrNotFound
+		return nil, errs.ErrNotFound
 	}
 	return res, nil
 }
 
-func (m *memRepo) List(_ context.Context) ([]repository.Resource, error) {
+func (m *memService) ListResources(_ context.Context) ([]*model.Resource, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	out := make([]repository.Resource, 0, len(m.items))
+	out := make([]*model.Resource, 0, len(m.items))
 	for _, v := range m.items {
 		out = append(out, v)
 	}
 	return out, nil
 }
 
-func (m *memRepo) Update(_ context.Context, id, name, description string) (repository.Resource, error) {
+func (m *memService) UpdateResource(_ context.Context, id, name, description string) (*model.Resource, error) {
+	if name == "" {
+		return nil, fmt.Errorf("%w: name is required", errs.ErrInvalid)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	res, ok := m.items[id]
 	if !ok {
-		return repository.Resource{}, repository.ErrNotFound
+		return nil, errs.ErrNotFound
 	}
 	res.Name = name
 	res.Description = description
 	res.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	m.items[id] = res
 	return res, nil
 }
 
-func (m *memRepo) Delete(_ context.Context, id string) error {
+func (m *memService) DeleteResource(_ context.Context, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if _, ok := m.items[id]; !ok {
-		return repository.ErrNotFound
+		return errs.ErrNotFound
 	}
 	delete(m.items, id)
 	return nil
 }
 
-// newTestServer creates an httptest.Server with the resource handler wired to
-// the given repository.
-func newTestServer(repo repository.ResourceRepository) *httptest.Server {
-	r := chi.NewRouter()
-	h := handler.NewResourceHandler(repo)
-	h.Routes(r)
-	return httptest.NewServer(r)
+// newTestServer creates an httptest.Server with the handler wired to
+// the given service.
+func newTestServer(svc transporthttp.Service) *httptest.Server {
+	handler := transporthttp.NewHandler(svc, &stubPinger{}, slog.Default(), false)
+	return httptest.NewServer(handler)
 }
 
 func TestCreateResource(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	body := `{"name":"test-resource","description":"a test"}`
@@ -120,7 +123,7 @@ func TestCreateResource(t *testing.T) {
 		t.Fatalf("expected 201, got %d", resp.StatusCode)
 	}
 
-	var res repository.Resource
+	var res model.Resource
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -136,8 +139,8 @@ func TestCreateResource(t *testing.T) {
 }
 
 func TestCreateResourceMissingName(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	body := `{"description":"no name"}`
@@ -153,8 +156,8 @@ func TestCreateResourceMissingName(t *testing.T) {
 }
 
 func TestCreateResourceInvalidJSON(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString("{invalid"))
@@ -169,8 +172,8 @@ func TestCreateResourceInvalidJSON(t *testing.T) {
 }
 
 func TestGetResource(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	// Create a resource first.
@@ -179,7 +182,7 @@ func TestGetResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	var created repository.Resource
+	var created model.Resource
 	json.NewDecoder(createResp.Body).Decode(&created)
 	createResp.Body.Close()
 
@@ -194,7 +197,7 @@ func TestGetResource(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var fetched repository.Resource
+	var fetched model.Resource
 	json.NewDecoder(resp.Body).Decode(&fetched)
 	if fetched.ID != created.ID {
 		t.Errorf("ID mismatch: got %q, want %q", fetched.ID, created.ID)
@@ -205,8 +208,8 @@ func TestGetResource(t *testing.T) {
 }
 
 func TestGetResourceNotFound(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/resources/nonexistent")
@@ -221,8 +224,8 @@ func TestGetResourceNotFound(t *testing.T) {
 }
 
 func TestListResources(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	// Create two resources.
@@ -245,7 +248,7 @@ func TestListResources(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var items []repository.Resource
+	var items []model.Resource
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -255,8 +258,8 @@ func TestListResources(t *testing.T) {
 }
 
 func TestListResourcesEmpty(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/resources")
@@ -269,7 +272,7 @@ func TestListResourcesEmpty(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var items []repository.Resource
+	var items []model.Resource
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -282,8 +285,8 @@ func TestListResourcesEmpty(t *testing.T) {
 }
 
 func TestUpdateResource(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	// Create.
@@ -292,7 +295,7 @@ func TestUpdateResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	var created repository.Resource
+	var created model.Resource
 	json.NewDecoder(createResp.Body).Decode(&created)
 	createResp.Body.Close()
 
@@ -314,7 +317,7 @@ func TestUpdateResource(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var updated repository.Resource
+	var updated model.Resource
 	json.NewDecoder(resp.Body).Decode(&updated)
 	if updated.Name != "updated" {
 		t.Errorf("expected name \"updated\", got %q", updated.Name)
@@ -328,8 +331,8 @@ func TestUpdateResource(t *testing.T) {
 }
 
 func TestUpdateResourceNotFound(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	body := `{"name":"ghost","description":"nope"}`
@@ -351,8 +354,8 @@ func TestUpdateResourceNotFound(t *testing.T) {
 }
 
 func TestDeleteResource(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	// Create.
@@ -361,7 +364,7 @@ func TestDeleteResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	var created repository.Resource
+	var created model.Resource
 	json.NewDecoder(createResp.Body).Decode(&created)
 	createResp.Body.Close()
 
@@ -393,8 +396,8 @@ func TestDeleteResource(t *testing.T) {
 }
 
 func TestDeleteResourceNotFound(t *testing.T) {
-	repo := newMemRepo()
-	srv := newTestServer(repo)
+	svc := newMemService()
+	srv := newTestServer(svc)
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/resources/nonexistent", nil)

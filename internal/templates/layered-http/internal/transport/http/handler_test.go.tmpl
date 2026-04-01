@@ -1,19 +1,18 @@
-package handler_test
+package http_test
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
-
-	"github.com/example/myservice/internal/handler"
+	transporthttp "[[ .ModulePath ]]/internal/transport/http"
 )
 
-// stubPinger implements handler.DBPinger for testing.
+// stubPinger implements transporthttp.DBPinger for testing.
 type stubPinger struct {
 	err error
 }
@@ -21,11 +20,8 @@ type stubPinger struct {
 func (s *stubPinger) Ping(_ context.Context) error { return s.err }
 
 func TestHealthz_ReturnsOK(t *testing.T) {
-	r := chi.NewRouter()
-	h := handler.NewHealthHandler(&stubPinger{})
-	h.Routes(r)
-
-	srv := httptest.NewServer(r)
+	handler := transporthttp.NewHandler(nil, &stubPinger{}, slog.Default(), false)
+	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/healthz")
@@ -48,11 +44,8 @@ func TestHealthz_ReturnsOK(t *testing.T) {
 }
 
 func TestReadyz_DBHealthy(t *testing.T) {
-	r := chi.NewRouter()
-	h := handler.NewHealthHandler(&stubPinger{})
-	h.Routes(r)
-
-	srv := httptest.NewServer(r)
+	handler := transporthttp.NewHandler(nil, &stubPinger{}, slog.Default(), false)
+	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/readyz")
@@ -75,11 +68,8 @@ func TestReadyz_DBHealthy(t *testing.T) {
 }
 
 func TestReadyz_DBUnhealthy(t *testing.T) {
-	r := chi.NewRouter()
-	h := handler.NewHealthHandler(&stubPinger{err: errors.New("connection refused")})
-	h.Routes(r)
-
-	srv := httptest.NewServer(r)
+	handler := transporthttp.NewHandler(nil, &stubPinger{err: errors.New("connection refused")}, slog.Default(), false)
+	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/readyz")
@@ -94,11 +84,8 @@ func TestReadyz_DBUnhealthy(t *testing.T) {
 }
 
 func TestReadyz_NilDB(t *testing.T) {
-	r := chi.NewRouter()
-	h := handler.NewHealthHandler(nil)
-	h.Routes(r)
-
-	srv := httptest.NewServer(r)
+	handler := transporthttp.NewHandler(nil, nil, slog.Default(), false)
+	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/readyz")

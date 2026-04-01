@@ -1,0 +1,62 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/example/myservice/internal/errs"
+	"github.com/example/myservice/internal/model"
+)
+
+// ResourceService implements business logic for the resource domain.
+// For now this is largely a passthrough to the repository, but it is the
+// correct place to add validation, authorisation, event publishing, and
+// other cross-cutting concerns.
+type ResourceService struct {
+	repo ResourceRepository
+}
+
+// NewResourceService creates a ResourceService backed by the given repository.
+func NewResourceService(repo ResourceRepository) *ResourceService {
+	return &ResourceService{repo: repo}
+}
+
+// CreateResource validates input and delegates creation to the repository.
+func (s *ResourceService) CreateResource(ctx context.Context, name, description string) (*model.Resource, error) {
+	if name == "" {
+		return nil, fmt.Errorf("%w: name is required", errs.ErrInvalid)
+	}
+	res := &model.Resource{
+		Name:        name,
+		Description: description,
+	}
+	return s.repo.Create(ctx, res)
+}
+
+// GetResource retrieves a single resource by ID.
+func (s *ResourceService) GetResource(ctx context.Context, id string) (*model.Resource, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
+// ListResources returns all resources.
+func (s *ResourceService) ListResources(ctx context.Context) ([]*model.Resource, error) {
+	return s.repo.List(ctx)
+}
+
+// UpdateResource validates input and delegates the update to the repository.
+func (s *ResourceService) UpdateResource(ctx context.Context, id, name, description string) (*model.Resource, error) {
+	if name == "" {
+		return nil, fmt.Errorf("%w: name is required", errs.ErrInvalid)
+	}
+	res := &model.Resource{
+		ID:          id,
+		Name:        name,
+		Description: description,
+	}
+	return s.repo.Update(ctx, res)
+}
+
+// DeleteResource removes a resource by ID.
+func (s *ResourceService) DeleteResource(ctx context.Context, id string) error {
+	return s.repo.Delete(ctx, id)
+}

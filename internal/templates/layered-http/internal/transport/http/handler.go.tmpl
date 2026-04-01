@@ -1,0 +1,78 @@
+package http
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+[[ if .HasOTel ]]	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+[[ end ]]
+	applog "[[ .ModulePath ]]/internal/log"
+	"[[ .ModulePath ]]/internal/model"
+)
+
+// Service defines the operations the HTTP transport layer requires from the
+// business logic layer. This interface is defined by the consumer (transport)
+// rather than the implementor (service package).
+type Service interface {
+	CreateResource(ctx context.Context, name, description string) (*model.Resource, error)
+	GetResource(ctx context.Context, id string) (*model.Resource, error)
+	ListResources(ctx context.Context) ([]*model.Resource, error)
+	UpdateResource(ctx context.Context, id, name, description string) (*model.Resource, error)
+	DeleteResource(ctx context.Context, id string) error
+}
+
+// DBPinger is satisfied by any type that can verify database connectivity.
+type DBPinger interface {
+	Ping(ctx context.Context) error
+}
+
+// NewHandler creates a fully-wired chi router with all middleware and routes
+// registered. It implements http.Handler and is ready to be used as the
+// handler for an *http.Server.
+func NewHandler(svc Service, db DBPinger, logger *slog.Logger, otelEnabled bool) http.Handler {
+	r := chi.NewRouter()
+
+	// --- Middleware chain ---
+	r.Use(requestID)
+	r.Use(loggerInjector(logger))
+	r.Use(logging)
+	r.Use(chimw.Recoverer)
+[[ if .HasOTel ]]
+	if otelEnabled {
+		r.Use(func(next http.Handler) http.Handler {
+			return otelhttp.NewHandler(next, "http.request")
+		})
+	}
+[[ end ]]
+	// --- Health routes ---
+	r.Get("/healthz", healthz)
+	r.Get("/readyz", readyz(db))
+
+	// --- Resource routes ---
+	r.Route("/api/resources", func(r chi.Router) {
+		r.Post("/", createResource(svc))
+		r.Get("/", listResources(svc))
+		r.Route("/{id}", func(r chi.Router) {
+			r.Get("/", getResource(svc))
+			r.Put("/", updateResource(svc))
+			r.Delete("/", deleteResource(svc))
+		})
+	})
+
+	return r
+}
+
+// loggerInjector returns middleware that stores the application logger (with
+// the current request ID) in the request context.
+func loggerInjector(base *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reqLogger := base.With("request_id", getRequestID(r.Context()))
+			ctx := applog.WithLogger(r.Context(), reqLogger)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}

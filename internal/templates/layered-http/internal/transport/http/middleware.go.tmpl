@@ -1,0 +1,84 @@
+package http
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+
+	applog "[[ .ModulePath ]]/internal/log"
+)
+
+const headerXRequestID = "X-Request-ID"
+
+type requestIDKey struct{}
+
+// requestID is HTTP middleware that ensures every request has a unique
+// identifier. If the incoming request carries an X-Request-ID header its value
+// is reused; otherwise a new UUID is generated. The ID is stored in the
+// request context and echoed back in the response header.
+func requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get(headerXRequestID)
+		if id == "" {
+			id = uuid.New().String()
+		}
+
+		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+		w.Header().Set(headerXRequestID, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// getRequestID extracts the request ID from the context. Returns an empty
+// string when no ID is present.
+func getRequestID(ctx context.Context) string {
+	if id, ok := ctx.Value(requestIDKey{}).(string); ok {
+		return id
+	}
+	return ""
+}
+
+// responseWriter wraps http.ResponseWriter to capture the status code.
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	written    bool
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	if !rw.written {
+		rw.statusCode = code
+		rw.written = true
+	}
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if !rw.written {
+		rw.statusCode = http.StatusOK
+		rw.written = true
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
+// logging is HTTP middleware that records each request's method, path, status
+// code, and duration using the slog logger stored in the request context.
+func logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+
+		next.ServeHTTP(wrapped, r)
+
+		logger := applog.FromContext(r.Context())
+		logger.Info("http request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", wrapped.statusCode,
+			"duration", time.Since(start),
+			"request_id", getRequestID(r.Context()),
+		)
+	})
+}

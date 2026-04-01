@@ -1,0 +1,7 @@
+I think the application bootstrapping should be modular. By this I mean there should be some sort of bootstrapping file or package where all of the dependencies are injected
+and returned to main. I'm not looking for a dependency injector per se (e.g wire or fx), but instead some kind of generic bootstrapper. This could be a light abstraction
+that also manages graceful application shutdown. My reasoning behind this is that putting all of the bootstrapping in the main `run` function will quickly clutter any nontrivial
+service. I think separating things out in a modular fashion by concern is ideal, even for MVP.
+
+Look at the file ~/Downloads/go_svc_structure.pdf ... this is the proposed project structure I implemented at my job. I dont expect you to implement this here, but I would like to
+use it as a starting point for foundational discussions

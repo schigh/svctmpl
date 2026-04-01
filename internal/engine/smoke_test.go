@@ -37,8 +37,14 @@ func TestSmokeRenderAndBuild(t *testing.T) {
 	// Verify key files exist
 	for _, f := range []string{
 		"cmd/app/main.go",
+		"internal/app/app.go",
 		"internal/config/config.go",
-		"internal/handler/health.go",
+		"internal/errs/errors.go",
+		"internal/model/resource.go",
+		"internal/service/resource.go",
+		"internal/transport/http/handler.go",
+		"internal/transport/http/health.go",
+		"internal/repository/resource.go",
 		"go.mod",
 		"Makefile",
 		"README.md",
