@@ -1,0 +1,55 @@
+name: layered-http
+description: HTTP service with layered architecture
+files:
+  - path: cmd/app/main.go.tmpl
+    output: cmd/app/main.go
+  - path: internal/config/config.go.tmpl
+    output: internal/config/config.go
+  - path: internal/handler/errors.go.tmpl
+    output: internal/handler/errors.go
+  - path: internal/handler/health.go.tmpl
+    output: internal/handler/health.go
+  - path: internal/handler/health_test.go.tmpl
+    output: internal/handler/health_test.go
+  - path: internal/handler/resource.go.tmpl
+    output: internal/handler/resource.go
+    requires: [database]
+  - path: internal/handler/resource_test.go.tmpl
+    output: internal/handler/resource_test.go
+    requires: [database]
+  - path: internal/repository/resource.go.tmpl
+    output: internal/repository/resource.go
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/repository/queries.sql.tmpl
+    output: internal/repository/queries.sql
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/log/log.go.tmpl
+    output: internal/log/log.go
+  - path: internal/server/server.go.tmpl
+    output: internal/server/server.go
+  - path: internal/middleware/requestid.go.tmpl
+    output: internal/middleware/requestid.go
+  - path: internal/middleware/logging.go.tmpl
+    output: internal/middleware/logging.go
+  - path: migrations/001_create_resources.sql.tmpl
+    output: migrations/001_create_resources.sql
+    requires: [database]
+  - path: sqlc.yaml.tmpl
+    output: sqlc.yaml
+    requires: [database, "db_tooling:sqlc"]
+  - path: Dockerfile.tmpl
+    output: Dockerfile
+    requires: [container]
+  - path: Makefile.tmpl
+    output: Makefile
+  - path: .github/workflows/ci.yml.tmpl
+    output: .github/workflows/ci.yml
+    requires: ["ci:github-actions"]
+  - path: go.mod.tmpl
+    output: go.mod
+  - path: .env.example.tmpl
+    output: .env.example
+  - path: .gitignore.tmpl
+    output: .gitignore
+  - path: README.md.tmpl
+    output: README.md

@@ -1,0 +1,36 @@
+BINARY   := [[ .ProjectName ]]
+PKG      := ./cmd/app
+GOFLAGS  := -ldflags="-s -w"
+
+.PHONY: build run test lint migrate-up migrate-down generate docker-build docker-run clean
+
+build:
+	go build $(GOFLAGS) -o $(BINARY) $(PKG)
+
+run: build
+	./$(BINARY)
+
+test:
+	go test -race -v -count=1 ./...
+
+lint:
+	golangci-lint run ./...
+
+migrate-up:
+	goose -dir migrations postgres "$$DATABASE_URL" up
+
+migrate-down:
+	goose -dir migrations postgres "$$DATABASE_URL" down
+
+generate:
+	sqlc generate
+
+docker-build:
+	docker build -t $(BINARY):latest .
+
+docker-run: docker-build
+	docker run --rm -p 8080:8080 -p 9090:9090 --env-file .env $(BINARY):latest
+
+clean:
+	rm -f $(BINARY)
+	go clean -testcache

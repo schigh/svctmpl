@@ -1,0 +1,413 @@
+package handler_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/example/myservice/internal/handler"
+	"github.com/example/myservice/internal/repository"
+)
+
+// memRepo is a thread-safe in-memory implementation of repository.ResourceRepository
+// for handler-level tests.
+type memRepo struct {
+	mu    sync.RWMutex
+	items map[string]repository.Resource
+	seq   int
+}
+
+func newMemRepo() *memRepo {
+	return &memRepo{items: make(map[string]repository.Resource)}
+}
+
+func (m *memRepo) Create(_ context.Context, name, description string) (repository.Resource, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.seq++
+	id := fmt.Sprintf("00000000-0000-0000-0000-%012d", m.seq)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	res := repository.Resource{
+		ID:          id,
+		Name:        name,
+		Description: description,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	m.items[id] = res
+	return res, nil
+}
+
+func (m *memRepo) GetByID(_ context.Context, id string) (repository.Resource, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	res, ok := m.items[id]
+	if !ok {
+		return repository.Resource{}, repository.ErrNotFound
+	}
+	return res, nil
+}
+
+func (m *memRepo) List(_ context.Context) ([]repository.Resource, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	out := make([]repository.Resource, 0, len(m.items))
+	for _, v := range m.items {
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+func (m *memRepo) Update(_ context.Context, id, name, description string) (repository.Resource, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	res, ok := m.items[id]
+	if !ok {
+		return repository.Resource{}, repository.ErrNotFound
+	}
+	res.Name = name
+	res.Description = description
+	res.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
+	m.items[id] = res
+	return res, nil
+}
+
+func (m *memRepo) Delete(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.items[id]; !ok {
+		return repository.ErrNotFound
+	}
+	delete(m.items, id)
+	return nil
+}
+
+// newTestServer creates an httptest.Server with the resource handler wired to
+// the given repository.
+func newTestServer(repo repository.ResourceRepository) *httptest.Server {
+	r := chi.NewRouter()
+	h := handler.NewResourceHandler(repo)
+	h.Routes(r)
+	return httptest.NewServer(r)
+}
+
+func TestCreateResource(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	body := `{"name":"test-resource","description":"a test"}`
+	resp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("POST /api/resources: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	var res repository.Resource
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if res.ID == "" {
+		t.Error("expected non-empty ID")
+	}
+	if res.Name != "test-resource" {
+		t.Errorf("expected name \"test-resource\", got %q", res.Name)
+	}
+	if res.Description != "a test" {
+		t.Errorf("expected description \"a test\", got %q", res.Description)
+	}
+}
+
+func TestCreateResourceMissingName(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	body := `{"description":"no name"}`
+	resp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateResourceInvalidJSON(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	resp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString("{invalid"))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestGetResource(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	// Create a resource first.
+	body := `{"name":"fetch-me","description":"desc"}`
+	createResp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var created repository.Resource
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	// Fetch by ID.
+	resp, err := http.Get(srv.URL + "/api/resources/" + created.ID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var fetched repository.Resource
+	json.NewDecoder(resp.Body).Decode(&fetched)
+	if fetched.ID != created.ID {
+		t.Errorf("ID mismatch: got %q, want %q", fetched.ID, created.ID)
+	}
+	if fetched.Name != "fetch-me" {
+		t.Errorf("name mismatch: got %q", fetched.Name)
+	}
+}
+
+func TestGetResourceNotFound(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/resources/nonexistent")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestListResources(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	// Create two resources.
+	for _, name := range []string{"alpha", "bravo"} {
+		body := fmt.Sprintf(`{"name":%q}`, name)
+		resp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString(body))
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		resp.Body.Close()
+	}
+
+	resp, err := http.Get(srv.URL + "/api/resources")
+	if err != nil {
+		t.Fatalf("GET /api/resources: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var items []repository.Resource
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(items))
+	}
+}
+
+func TestListResourcesEmpty(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/resources")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var items []repository.Resource
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if items == nil {
+		t.Error("expected empty slice, got nil")
+	}
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestUpdateResource(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	// Create.
+	body := `{"name":"original","description":"old"}`
+	createResp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var created repository.Resource
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	// Update.
+	updateBody := `{"name":"updated","description":"new"}`
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/resources/"+created.ID, bytes.NewBufferString(updateBody))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var updated repository.Resource
+	json.NewDecoder(resp.Body).Decode(&updated)
+	if updated.Name != "updated" {
+		t.Errorf("expected name \"updated\", got %q", updated.Name)
+	}
+	if updated.Description != "new" {
+		t.Errorf("expected description \"new\", got %q", updated.Description)
+	}
+	if updated.ID != created.ID {
+		t.Error("ID should not change")
+	}
+}
+
+func TestUpdateResourceNotFound(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	body := `{"name":"ghost","description":"nope"}`
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/resources/nonexistent", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteResource(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	// Create.
+	body := `{"name":"doomed"}`
+	createResp, err := http.Post(srv.URL+"/api/resources", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var created repository.Resource
+	json.NewDecoder(createResp.Body).Decode(&created)
+	createResp.Body.Close()
+
+	// Delete.
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/resources/"+created.ID, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", resp.StatusCode)
+	}
+
+	// Verify gone.
+	getResp, err := http.Get(srv.URL + "/api/resources/" + created.ID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	getResp.Body.Close()
+
+	if getResp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 after delete, got %d", getResp.StatusCode)
+	}
+}
+
+func TestDeleteResourceNotFound(t *testing.T) {
+	repo := newMemRepo()
+	srv := newTestServer(repo)
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/resources/nonexistent", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}

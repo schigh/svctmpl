@@ -1,0 +1,24 @@
+# Binary
+myservice
+
+# Environment
+.env
+
+# Go
+vendor/
+*.test
+
+# Coverage
+coverage.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
