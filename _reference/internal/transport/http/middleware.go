@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -12,12 +11,10 @@ import (
 
 const headerXRequestID = "X-Request-ID"
 
-type requestIDKey struct{}
-
 // requestID is HTTP middleware that ensures every request has a unique
 // identifier. If the incoming request carries an X-Request-ID header its value
-// is reused; otherwise a new UUID is generated. The ID is stored in the
-// request context and echoed back in the response header.
+// is reused; otherwise a new UUID is generated. The ID is stashed into the
+// logging context and echoed back in the response header.
 func requestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(headerXRequestID)
@@ -25,19 +22,12 @@ func requestID(next http.Handler) http.Handler {
 			id = uuid.New().String()
 		}
 
-		ctx := context.WithValue(r.Context(), requestIDKey{}, id)
+		// Stash into log context so every downstream log.Ctx(ctx) call
+		// automatically includes request_id.
+		ctx := applog.Stash(r.Context(), "request_id", id)
 		w.Header().Set(headerXRequestID, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// getRequestID extracts the request ID from the context. Returns an empty
-// string when no ID is present.
-func getRequestID(ctx context.Context) string {
-	if id, ok := ctx.Value(requestIDKey{}).(string); ok {
-		return id
-	}
-	return ""
 }
 
 // responseWriter wraps http.ResponseWriter to capture the status code.
@@ -64,7 +54,8 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 }
 
 // logging is HTTP middleware that records each request's method, path, status
-// code, and duration using the slog logger stored in the request context.
+// code, and duration. Fields stashed by upstream middleware (request_id,
+// trace_id, etc.) are included automatically via log.Ctx.
 func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -72,13 +63,11 @@ func logging(next http.Handler) http.Handler {
 
 		next.ServeHTTP(wrapped, r)
 
-		logger := applog.FromContext(r.Context())
-		logger.Info("http request",
+		applog.Ctx(r.Context()).Info("http request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", wrapped.statusCode,
 			"duration", time.Since(start),
-			"request_id", getRequestID(r.Context()),
 		)
 	})
 }

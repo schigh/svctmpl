@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
+
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,7 +20,7 @@ type stubPinger struct {
 func (s *stubPinger) Ping(_ context.Context) error { return s.err }
 
 func TestHealthz_ReturnsOK(t *testing.T) {
-	handler := transporthttp.NewHandler(nil, &stubPinger{}, slog.Default(), false)
+	handler := transporthttp.NewHandler(nil, &stubPinger{}, false)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
@@ -44,7 +44,7 @@ func TestHealthz_ReturnsOK(t *testing.T) {
 }
 
 func TestReadyz_DBHealthy(t *testing.T) {
-	handler := transporthttp.NewHandler(nil, &stubPinger{}, slog.Default(), false)
+	handler := transporthttp.NewHandler(nil, &stubPinger{}, false)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
@@ -68,7 +68,7 @@ func TestReadyz_DBHealthy(t *testing.T) {
 }
 
 func TestReadyz_DBUnhealthy(t *testing.T) {
-	handler := transporthttp.NewHandler(nil, &stubPinger{err: errors.New("connection refused")}, slog.Default(), false)
+	handler := transporthttp.NewHandler(nil, &stubPinger{err: errors.New("connection refused")}, false)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
@@ -84,7 +84,7 @@ func TestReadyz_DBUnhealthy(t *testing.T) {
 }
 
 func TestReadyz_NilDB(t *testing.T) {
-	handler := transporthttp.NewHandler(nil, nil, slog.Default(), false)
+	handler := transporthttp.NewHandler(nil, nil, false)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 

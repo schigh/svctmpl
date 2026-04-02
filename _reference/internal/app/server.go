@@ -14,7 +14,7 @@ import (
 func (a *App) initHTTPServer() error {
 	repo := repository.NewResourceRepository(a.DB)
 	svc := service.NewResourceService(repo)
-	handler := httphandler.NewHandler(svc, a.DB, a.Logger, a.Config.OTel.Enabled)
+	handler := httphandler.NewHandler(svc, a.DB, a.Config.OTel.Enabled)
 
 	a.HTTPServer = &http.Server{
 		Addr:         a.Config.HTTP.Addr(),

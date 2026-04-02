@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -103,7 +102,7 @@ func (m *memService) DeleteResource(_ context.Context, id string) error {
 // newTestServer creates an httptest.Server with the handler wired to
 // the given service.
 func newTestServer(svc transporthttp.Service) *httptest.Server {
-	handler := transporthttp.NewHandler(svc, &stubPinger{}, slog.Default(), false)
+	handler := transporthttp.NewHandler(svc, &stubPinger{}, false)
 	return httptest.NewServer(handler)
 }
 

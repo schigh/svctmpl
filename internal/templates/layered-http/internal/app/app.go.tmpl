@@ -107,9 +107,10 @@ func (a *App) initConfig() error {
 }
 
 // initLogger creates the structured logger and sets the slog default.
+// All subsequent log.Ctx(ctx) calls use this logger as the base.
 func (a *App) initLogger() {
 	a.Logger = applog.New(a.Config.Service.Environment)
-	slog.SetDefault(a.Logger)
+	applog.SetDefault(a.Logger)
 	a.Logger.Info("starting service",
 		"name", a.Config.Service.Name,
 		"env", a.Config.Service.Environment,
