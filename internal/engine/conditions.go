@@ -1,12 +1,16 @@
 package engine
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/schigh/svctmpl/internal/genome"
 )
 
 // choicesMap returns a flat map of choice axis names to their values.
+// Boolean axes are represented as "true"/"false" strings so they work
+// with the same bare-key condition logic (bare "compose" passes when
+// the value is not "none" and not "false").
 func choicesMap(c *genome.Choices) map[string]string {
 	return map[string]string{
 		"transport":     c.Transport,
@@ -20,6 +24,9 @@ func choicesMap(c *genome.Choices) map[string]string {
 		"config":        c.Config,
 		"ci":            c.CI,
 		"container":     c.Container,
+		"compose":       fmt.Sprintf("%t", c.Compose),
+		"k8s":           fmt.Sprintf("%t", c.K8s),
+		"tilt":          fmt.Sprintf("%t", c.Tilt),
 	}
 }
 
@@ -43,9 +50,9 @@ func EvaluateConditions(requires []string, choices *genome.Choices) bool {
 				return false
 			}
 		} else {
-			// bare key — choice must not be "none".
+			// bare key — choice must be active (not "none" and not "false").
 			v, exists := m[req]
-			if !exists || v == "none" {
+			if !exists || v == "none" || v == "false" {
 				return false
 			}
 		}

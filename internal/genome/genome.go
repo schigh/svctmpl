@@ -39,6 +39,11 @@ type Choices struct {
 	Config        string `yaml:"config"`
 	CI            string `yaml:"ci"`
 	Container     string `yaml:"container"`
+
+	// Deployment artifacts (boolean, all optional)
+	Compose bool `yaml:"compose"`
+	K8s     bool `yaml:"k8s"`
+	Tilt    bool `yaml:"tilt"`
 }
 
 // ErrFileNotFound indicates the genome file does not exist.
@@ -130,6 +135,9 @@ func Default() *Genome {
 			Config:        "env",
 			CI:            "github-actions",
 			Container:     "dockerfile",
+			Compose:       true,
+			K8s:           true,
+			Tilt:          false,
 		},
 	}
 }

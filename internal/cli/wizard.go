@@ -102,6 +102,18 @@ func RunWizard(g *genome.Genome) error {
 		g.Choices.Container = defaults.Choices.Container
 	}
 
+	// Pre-populate multi-select from existing boolean flags.
+	var deployChoices []string
+	if g.Choices.Compose {
+		deployChoices = append(deployChoices, "compose")
+	}
+	if g.Choices.K8s {
+		deployChoices = append(deployChoices, "k8s")
+	}
+	if g.Choices.Tilt {
+		deployChoices = append(deployChoices, "tilt")
+	}
+
 	form := huh.NewForm(
 		// Screen 1: Project name + module path
 		huh.NewGroup(
@@ -186,6 +198,19 @@ func RunWizard(g *genome.Genome) error {
 				Options(selectOptions("container")...).
 				Value(&g.Choices.Container),
 		),
+
+		// Screen 7: Deployment artifacts (multi-select)
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Deployment Artifacts").
+				Description("Select which deployment/orchestration files to generate (space to toggle)").
+				Options(
+					huh.NewOption("Docker Compose — local dev stack with postgres + OTel", "compose"),
+					huh.NewOption("Kubernetes — Deployment, Service, ConfigMap, Ingress, HPA", "k8s"),
+					huh.NewOption("Tilt — live-reload dev loop for containers", "tilt"),
+				).
+				Value(&deployChoices),
+		),
 	).WithTheme(huh.ThemeCharm())
 
 	err := form.Run()
@@ -201,6 +226,11 @@ func RunWizard(g *genome.Genome) error {
 	g.Choices.Transport = "http"
 	g.Choices.Structure = "layered"
 
+	// Map deployment multi-select back to boolean fields.
+	g.Choices.Compose = contains(deployChoices, "compose")
+	g.Choices.K8s = contains(deployChoices, "k8s")
+	g.Choices.Tilt = contains(deployChoices, "tilt")
+
 	// Auto-fix cross-axis constraint: database=none implies db_tooling=none and migrations=none.
 	if g.Choices.Database == "none" {
 		g.Choices.DBTooling = "none"
@@ -208,4 +238,13 @@ func RunWizard(g *genome.Genome) error {
 	}
 
 	return nil
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

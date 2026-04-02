@@ -51,6 +51,9 @@ type TemplateData struct {
 	HasOTelFull  bool // observability == "otel-full"
 	HasCI        bool // ci != "none"
 	HasContainer bool // container != "none"
+	HasCompose   bool // compose == true
+	HasK8s       bool // k8s == true
+	HasTilt      bool // tilt == true
 }
 
 // NewTemplateData builds a TemplateData from a Genome.
@@ -78,6 +81,9 @@ func NewTemplateData(g *genome.Genome) *TemplateData {
 		HasOTelFull:   c.Observability == "otel-full",
 		HasCI:         c.CI != "none",
 		HasContainer:  c.Container != "none",
+		HasCompose:    c.Compose,
+		HasK8s:        c.K8s,
+		HasTilt:       c.Tilt,
 	}
 }
 

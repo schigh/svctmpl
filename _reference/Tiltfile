@@ -1,0 +1,44 @@
+# Tiltfile for myservice
+# Live-reload development with Tilt (https://tilt.dev)
+#
+# Prerequisites:
+#   - Tilt installed: https://docs.tilt.dev/install.html
+#   - Docker running
+#   - kubectl configured (for k8s mode) OR docker-compose available
+#
+# Usage:
+#   tilt up          # start the dev environment
+#   tilt down        # tear it down
+#
+# Tilt watches your Go source, rebuilds the binary, and live-syncs it into
+# the running container. No manual rebuild needed.
+
+# Build the Go binary for linux/amd64 (container target).
+local_resource(
+    'compile',
+    'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/myservice ./cmd/app',
+    deps=['cmd', 'internal', 'go.mod', 'go.sum'],
+)
+
+# Build the Docker image using the existing Dockerfile.
+docker_build(
+    'myservice',
+    '.',
+    dockerfile='Dockerfile',
+    live_update=[
+        # When Go source changes, rebuild and sync the binary.
+        sync('.', '/app'),
+        run('CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/bin/myservice ./cmd/app',
+            trigger=['cmd', 'internal', 'go.mod', 'go.sum']),
+    ],
+)
+
+# If using docker-compose, Tilt can drive it directly.
+# Uncomment ONE of the following sections:
+
+# --- Option A: Docker Compose mode ---
+# docker_compose('docker-compose.yml')
+
+# --- Option B: Kubernetes mode ---
+# k8s_yaml(kustomize('k8s'))
+# k8s_resource('myservice', port_forwards=['8080:8080', '9090:9090'])

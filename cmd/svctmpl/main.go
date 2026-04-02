@@ -58,6 +58,9 @@ func newCmd() *cobra.Command {
 		flagConfig        string
 		flagCI            string
 		flagContainer     string
+		flagCompose       bool
+		flagK8s           bool
+		flagTilt          bool
 	)
 
 	cmd := &cobra.Command{
@@ -80,7 +83,7 @@ func newCmd() *cobra.Command {
 				applyFlags(cmd, g,
 					flagName, flagModule, flagRouter, flagDatabase, flagDBTooling,
 					flagMigrations, flagObservability, flagLogging, flagConfig,
-					flagCI, flagContainer,
+					flagCI, flagContainer, flagCompose, flagK8s, flagTilt,
 				)
 
 				// Only run the TUI wizard if there are missing required fields.
@@ -207,6 +210,9 @@ func newCmd() *cobra.Command {
 	flags.StringVar(&flagConfig, "config", "", "config strategy (env, koanf)")
 	flags.StringVar(&flagCI, "ci", "", "CI pipeline (github-actions, none)")
 	flags.StringVar(&flagContainer, "container", "", "container config (dockerfile, none)")
+	flags.BoolVar(&flagCompose, "compose", false, "generate Docker Compose files")
+	flags.BoolVar(&flagK8s, "k8s", false, "generate Kubernetes manifests")
+	flags.BoolVar(&flagTilt, "tilt", false, "generate Tiltfile for live-reload dev")
 
 	return cmd
 }
@@ -215,6 +221,7 @@ func newCmd() *cobra.Command {
 func applyFlags(cmd *cobra.Command, g *genome.Genome,
 	name, module, router, database, dbTooling, migrations,
 	observability, logging, config, ci, container string,
+	compose, k8s, tilt bool,
 ) {
 	if cmd.Flags().Changed("name") {
 		g.Project.Name = name
@@ -248,6 +255,15 @@ func applyFlags(cmd *cobra.Command, g *genome.Genome,
 	}
 	if cmd.Flags().Changed("container") {
 		g.Choices.Container = container
+	}
+	if cmd.Flags().Changed("compose") {
+		g.Choices.Compose = compose
+	}
+	if cmd.Flags().Changed("k8s") {
+		g.Choices.K8s = k8s
+	}
+	if cmd.Flags().Changed("tilt") {
+		g.Choices.Tilt = tilt
 	}
 }
 

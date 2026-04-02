@@ -69,29 +69,40 @@ files:
     output: README.md
   - path: docker-compose.yml.tmpl
     output: docker-compose.yml
+    requires: [compose]
   - path: deploy/otel-collector-config.yaml.tmpl
     output: deploy/otel-collector-config.yaml
-    requires: ["observability:otel-full"]
+    requires: [compose, "observability:otel-full"]
   - path: deploy/prometheus.yml.tmpl
     output: deploy/prometheus.yml
-    requires: ["observability:otel-full"]
+    requires: [compose, "observability:otel-full"]
   - path: deploy/grafana/datasources.yml.tmpl
     output: deploy/grafana/datasources.yml
-    requires: ["observability:otel-full"]
+    requires: [compose, "observability:otel-full"]
   - path: k8s/namespace.yaml.tmpl
     output: k8s/namespace.yaml
+    requires: [k8s]
   - path: k8s/configmap.yaml.tmpl
     output: k8s/configmap.yaml
+    requires: [k8s]
   - path: k8s/secret.yaml.tmpl
     output: k8s/secret.yaml
-    requires: [database]
+    requires: [k8s, database]
   - path: k8s/deployment.yaml.tmpl
     output: k8s/deployment.yaml
+    requires: [k8s]
   - path: k8s/service.yaml.tmpl
     output: k8s/service.yaml
+    requires: [k8s]
   - path: k8s/ingress.yaml.tmpl
     output: k8s/ingress.yaml
+    requires: [k8s]
   - path: k8s/hpa.yaml.tmpl
     output: k8s/hpa.yaml
+    requires: [k8s]
   - path: k8s/kustomization.yaml.tmpl
     output: k8s/kustomization.yaml
+    requires: [k8s]
+  - path: Tiltfile.tmpl
+    output: Tiltfile
+    requires: [tilt]
