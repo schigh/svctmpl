@@ -1,0 +1,22 @@
+# Non-secret configuration for the myservice deployment.
+#
+# Customize these values per environment. Secrets (DB credentials) are
+# stored separately in secret.yaml or via a secrets manager.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myservice-config
+  namespace: myservice
+  labels:
+    app: myservice
+data:
+  SERVICE_NAME: myservice
+  SERVICE_ENV: production
+  DB_HOST: postgres.myservice.svc.cluster.local
+  DB_PORT: "5432"
+  DB_NAME: myservice
+  DB_SSLMODE: require
+  HTTP_PORT: "8080"
+  OTEL_ENABLED: "true"
+  OTEL_SERVICE_NAME: myservice
+  OTEL_METRICS_PORT: "9090"

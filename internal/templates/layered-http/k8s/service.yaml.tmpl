@@ -1,0 +1,24 @@
+# ClusterIP Service exposes [[ .ProjectName ]] within the cluster.
+#
+# Port 80 forwards to the HTTP server (8080).
+# Port 9090 forwards to the metrics endpoint for Prometheus scraping.
+apiVersion: v1
+kind: Service
+metadata:
+  name: [[ .ProjectName ]]
+  namespace: [[ .ProjectName ]]
+  labels:
+    app: [[ .ProjectName ]]
+spec:
+  type: ClusterIP
+  selector:
+    app: [[ .ProjectName ]]
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP

@@ -1,0 +1,26 @@
+# Non-secret configuration for the [[ .ProjectName ]] deployment.
+#
+# Customize these values per environment. Secrets (DB credentials) are
+# stored separately in secret.yaml or via a secrets manager.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: [[ .ProjectName ]]-config
+  namespace: [[ .ProjectName ]]
+  labels:
+    app: [[ .ProjectName ]]
+data:
+  SERVICE_NAME: [[ .ProjectName ]]
+  SERVICE_ENV: production
+[[ if .HasDatabase ]]
+  DB_HOST: postgres.[[ .ProjectName ]].svc.cluster.local
+  DB_PORT: "5432"
+  DB_NAME: [[ .ProjectName ]]
+  DB_SSLMODE: require
+[[ end ]]
+  HTTP_PORT: "8080"
+[[ if .HasOTel ]]
+  OTEL_ENABLED: "true"
+  OTEL_SERVICE_NAME: [[ .ProjectName ]]
+  OTEL_METRICS_PORT: "9090"
+[[ end ]]

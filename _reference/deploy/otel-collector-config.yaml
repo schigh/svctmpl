@@ -1,0 +1,31 @@
+# OpenTelemetry Collector configuration.
+#
+# Receives OTLP telemetry from the application and exports metrics to
+# Prometheus. Traces are received but not exported anywhere by default;
+# add a traces exporter (e.g. Jaeger, Zipkin, OTLP) to ship them.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: []

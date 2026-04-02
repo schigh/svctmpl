@@ -1,0 +1,27 @@
+# HorizontalPodAutoscaler scales the deployment based on CPU utilization.
+#
+# Customize:
+#   - Adjust minReplicas/maxReplicas for your traffic patterns
+#   - Add memory-based scaling if the workload is memory-bound
+#   - Lower targetCPUUtilizationPercentage for latency-sensitive services
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: [[ .ProjectName ]]
+  namespace: [[ .ProjectName ]]
+  labels:
+    app: [[ .ProjectName ]]
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: [[ .ProjectName ]]
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
