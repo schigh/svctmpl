@@ -49,20 +49,24 @@ clean:
 	go clean -testcache
 
 ## tools: build all development tools into tools/bin/
-tools: $(TOOLS_BIN)/golangci-lint $(TOOLS_BIN)/goose $(TOOLS_BIN)/sqlc
+tools: tools-tidy $(TOOLS_BIN)/golangci-lint $(TOOLS_BIN)/goose $(TOOLS_BIN)/sqlc
 	@echo "Tools built to $(TOOLS_BIN)/"
 
-$(TOOLS_BIN)/golangci-lint: tools/go.sum
+.PHONY: tools-tidy
+tools-tidy:
+	@test -f tools/go.sum || (cd tools && go mod tidy)
+
+$(TOOLS_BIN)/golangci-lint: tools/go.mod tools/tools.go
+	@mkdir -p $(TOOLS_BIN)
 	cd tools && go build -o ../$(TOOLS_BIN)/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
-$(TOOLS_BIN)/goose: tools/go.sum
+$(TOOLS_BIN)/goose: tools/go.mod tools/tools.go
+	@mkdir -p $(TOOLS_BIN)
 	cd tools && go build -o ../$(TOOLS_BIN)/goose github.com/pressly/goose/v3/cmd/goose
 
-$(TOOLS_BIN)/sqlc: tools/go.sum
-	cd tools && go build -o ../$(TOOLS_BIN)/sqlc github.com/sqlc-dev/sqlc/cmd/sqlc
-
-tools/go.sum: tools/go.mod tools/tools.go
-	cd tools && go mod tidy
+$(TOOLS_BIN)/sqlc: tools/go.mod tools/tools.go
+	@mkdir -p $(TOOLS_BIN)
+	cd tools && CGO_ENABLED=0 go build -o ../$(TOOLS_BIN)/sqlc github.com/sqlc-dev/sqlc/cmd/sqlc
 
 ## check-docker: verify docker is available
 check-docker:
