@@ -8,6 +8,9 @@ myservice
 vendor/
 *.test
 
+# Local tool binaries (built by `make tools`)
+tools/bin/
+
 # Coverage
 coverage.out
 coverage.html

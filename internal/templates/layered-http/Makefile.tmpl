@@ -1,17 +1,9 @@
 BINARY   := [[ .ProjectName ]]
 PKG      := ./cmd/app
 GOFLAGS  := -ldflags="-s -w"
+TOOLS_BIN := tools/bin
 
-# Pinned tool versions. Update these and run `make tools` to upgrade.
-GOLANGCI_LINT_VERSION := v1.64.8
-[[ if .HasMigrations -]]
-GOOSE_VERSION         := v3.24.3
-[[ end -]]
-[[ if .HasDBTooling -]]
-SQLC_VERSION          := v1.28.0
-[[ end ]]
-.PHONY: build run test lint[[ if .HasMigrations ]] migrate-up migrate-down[[ end ]][[ if .HasDBTooling ]] generate[[ end ]][[ if .HasContainer ]] docker-build docker-run[[ end ]] clean tools help \
-        check-golangci-lint[[ if .HasMigrations ]] check-goose[[ end ]][[ if .HasDBTooling ]] check-sqlc[[ end ]][[ if .HasContainer ]] check-docker[[ end ]]
+.PHONY: build run test lint[[ if .HasMigrations ]] migrate-up migrate-down[[ end ]][[ if .HasDBTooling ]] generate[[ end ]][[ if .HasContainer ]] docker-build docker-run[[ end ]] clean tools help[[ if .HasContainer ]] check-docker[[ end ]]
 
 ## build: compile the service binary
 build:
@@ -25,22 +17,22 @@ run: build
 test:
 	go test -race -v -count=1 ./...
 
-## lint: run golangci-lint
-lint: check-golangci-lint
-	golangci-lint run ./...
+## lint: run golangci-lint (project-local binary)
+lint: $(TOOLS_BIN)/golangci-lint
+	$(TOOLS_BIN)/golangci-lint run ./...
 [[ if .HasMigrations ]]
 ## migrate-up: apply database migrations
-migrate-up: check-goose
-	goose -dir migrations postgres "$$DATABASE_URL" up
+migrate-up: $(TOOLS_BIN)/goose
+	$(TOOLS_BIN)/goose -dir migrations postgres "$$DATABASE_URL" up
 
 ## migrate-down: roll back the last migration
-migrate-down: check-goose
-	goose -dir migrations postgres "$$DATABASE_URL" down
+migrate-down: $(TOOLS_BIN)/goose
+	$(TOOLS_BIN)/goose -dir migrations postgres "$$DATABASE_URL" down
 [[ end -]]
 [[ if .HasDBTooling ]]
 ## generate: regenerate sqlc query code
-generate: check-sqlc
-	sqlc generate
+generate: $(TOOLS_BIN)/sqlc
+	$(TOOLS_BIN)/sqlc generate
 [[ end -]]
 [[ if .HasContainer ]]
 ## docker-build: build the Docker image
@@ -56,31 +48,22 @@ clean:
 	rm -f $(BINARY)
 	go clean -testcache
 
-## tools: install pinned development tool versions
-tools:
-	@echo "Installing tools..."
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-[[ if .HasMigrations -]]
-	go install github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
-[[ end -]]
-[[ if .HasDBTooling -]]
-	go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
-[[ end -]]
-	@echo "Tools installed to $$(go env GOPATH)/bin"
+## tools: build all development tools into tools/bin/
+tools: $(TOOLS_BIN)/golangci-lint[[ if .HasMigrations ]] $(TOOLS_BIN)/goose[[ end ]][[ if .HasDBTooling ]] $(TOOLS_BIN)/sqlc[[ end ]]
+	@echo "Tools built to $(TOOLS_BIN)/"
 
-## check-golangci-lint: verify golangci-lint is available
-check-golangci-lint:
-	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not found. Run 'make tools' to install."; exit 1; }
+$(TOOLS_BIN)/golangci-lint: tools/go.sum
+	cd tools && go build -o ../$(TOOLS_BIN)/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 [[ if .HasMigrations ]]
-## check-goose: verify goose is available
-check-goose:
-	@command -v goose >/dev/null 2>&1 || { echo "goose not found. Run 'make tools' to install."; exit 1; }
+$(TOOLS_BIN)/goose: tools/go.sum
+	cd tools && go build -o ../$(TOOLS_BIN)/goose github.com/pressly/goose/v3/cmd/goose
 [[ end -]]
 [[ if .HasDBTooling ]]
-## check-sqlc: verify sqlc is available
-check-sqlc:
-	@command -v sqlc >/dev/null 2>&1 || { echo "sqlc not found. Run 'make tools' to install."; exit 1; }
-[[ end -]]
+$(TOOLS_BIN)/sqlc: tools/go.sum
+	cd tools && go build -o ../$(TOOLS_BIN)/sqlc github.com/sqlc-dev/sqlc/cmd/sqlc
+[[ end ]]
+tools/go.sum: tools/go.mod tools/tools.go
+	cd tools && go mod tidy
 [[ if .HasContainer ]]
 ## check-docker: verify docker is available
 check-docker:

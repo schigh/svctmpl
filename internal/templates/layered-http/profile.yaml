@@ -59,6 +59,10 @@ files:
   - path: .github/workflows/ci.yml.tmpl
     output: .github/workflows/ci.yml
     requires: ["ci:github-actions"]
+  - path: tools/go.mod.tmpl
+    output: tools/go.mod
+  - path: tools/tools.go.tmpl
+    output: tools/tools.go
   - path: go.mod.tmpl
     output: go.mod
   - path: .env.example.tmpl
