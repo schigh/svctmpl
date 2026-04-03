@@ -186,6 +186,63 @@ ci            github-actions, none
 container     dockerfile, none
 ```
 
+## Philosophy
+
+svctmpl is structurally opinionated. The stack choices (which router, which database) are configurable. The architecture is not.
+
+Every generated service follows the same principles:
+
+- **Hexagonal architecture.** Transport delegates to service, service delegates to repository. Each layer defines the interface for the layer below it (consumer-defined interfaces). No circular imports, no leaky abstractions.
+- **Transport owns the boundary.** String parsing, request validation, and type conversion happen at the transport layer. The domain model uses real Go types (`uuid.UUID`, not `string`). The service and repository never see raw user input.
+- **Modular bootstrapping.** One concern per file in `internal/app/`. Adding Redis means adding `redis.go`, not touching 5 places. Shutdown happens in reverse initialization order.
+- **Contextual logging.** Middleware stashes fields (request ID, trace ID) into context. Downstream code calls `log.Ctx(ctx)` and gets a logger with all stashed fields automatically.
+- **Sentinel errors.** Cross-cutting error types live in `internal/errs/`. The transport layer maps them to HTTP status codes. The service wraps them with context.
+- **Explicit type conversions.** `internal/convert/` holds all type mapping between representations (sqlc models to domain models, etc.). When you see `convert.RepositoryResourceToModel(...)`, you know exactly what's happening.
+
+The goal: code should be boring in structure so it can be interesting in logic. When you need to add a feature, you shouldn't wonder where it goes.
+
+## Roadmap
+
+svctmpl is in active development. Here's where it's going.
+
+### v0.1.0 (current)
+- [x] Interactive TUI wizard with Bubbletea/Huh
+- [x] Genome YAML schema with validation
+- [x] One template profile: layered-http (chi + postgres/sqlc + OTel + slog)
+- [x] Hexagonal architecture with consumer-defined interfaces
+- [x] Modular app bootstrapping with ordered shutdown
+- [x] Context-scoped logging (Stash/Ctx pattern)
+- [x] Docker Compose with full OTel stack (Collector + Prometheus + Grafana)
+- [x] Kubernetes manifests (Deployment, Service, ConfigMap, Secret, Ingress, HPA)
+- [x] Tiltfile for live-reload development
+- [x] Post-generation verification (go build + go vet + go test)
+- [x] goreleaser for cross-platform distribution
+
+### v0.2.0 — More stack choices
+- [ ] stdlib router (net/http mux, Go 1.22+)
+- [ ] Zap logging option
+- [ ] koanf config option
+- [ ] SQLite database option
+- [ ] golang-migrate migration option
+- [ ] Structured health checks via [github.com/schigh/health](https://github.com/schigh/health)
+
+### v0.3.0 — Structure as configuration
+- [ ] `svctmpl inspect` — infer a genome from an existing Go project
+- [ ] Concern placement as config (where does validation go? where do converters live?)
+- [ ] Multiple structure profiles (flat for tiny services, DDD for complex domains)
+- [ ] User-supplied template packs loaded from disk
+
+### v1.0.0 — The agentic overseer
+- [ ] AST-based code generation (always-valid Go output)
+- [ ] `svctmpl evolve` — read genome, diff codebase, apply surgical migrations
+- [ ] `svctmpl add <feature>` — add gRPC transport, Redis cache, etc. to existing projects
+- [ ] `svctmpl doctor` — verify project health against genome expectations
+- [ ] AI agent that understands the genome and generates code with 100% structural certainty
+
+### Contributing
+
+Interested in contributing? The best way right now is to generate a service, use it, and [open an issue](https://github.com/schigh/svctmpl/issues) with what felt wrong or missing. The template structure and genome schema are the areas where feedback has the most impact.
+
 ## License
 
 Apache 2.0. See [LICENSE](LICENSE) for details.
