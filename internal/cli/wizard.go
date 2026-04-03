@@ -23,11 +23,13 @@ var axisDescriptions = map[string]map[string]string{
 	},
 	"db_tooling": {
 		"sqlc": "type-safe SQL code generation",
+		"ent":  "Go-first entity framework with codegen",
 		"none": "no DB tooling",
 	},
 	"migrations": {
 		"goose":          "versioned SQL migration tool",
 		"golang-migrate": "schema migration via golang-migrate",
+		"atlas":          "declarative schema migrations (pairs with Ent)",
 		"none":           "no migrations",
 	},
 	"observability": {

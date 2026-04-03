@@ -219,6 +219,8 @@ svctmpl is in active development. Here's where it's going.
 - [x] goreleaser for cross-platform distribution
 
 ### v0.2.0 — More stack choices
+- [ ] [Ent](https://entgo.io) entity framework with codegen (Go-first alternative to sqlc)
+- [ ] [Atlas](https://atlasgo.io) declarative schema migrations (pairs with Ent)
 - [ ] stdlib router (net/http mux, Go 1.22+)
 - [ ] Zap logging option
 - [ ] koanf config option
