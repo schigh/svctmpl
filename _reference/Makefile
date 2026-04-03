@@ -2,35 +2,80 @@ BINARY   := myservice
 PKG      := ./cmd/app
 GOFLAGS  := -ldflags="-s -w"
 
-.PHONY: build run test lint migrate-up migrate-down generate docker-build docker-run clean
+# Pinned tool versions. Update these and run `make tools` to upgrade.
+GOLANGCI_LINT_VERSION := v1.64.8
+GOOSE_VERSION         := v3.24.3
+SQLC_VERSION          := v1.28.0
 
+.PHONY: build run test lint migrate-up migrate-down generate \
+        docker-build docker-run clean tools help \
+        check-golangci-lint check-goose check-sqlc check-docker
+
+## build: compile the service binary
 build:
 	go build $(GOFLAGS) -o $(BINARY) $(PKG)
 
+## run: build and run the service
 run: build
 	./$(BINARY)
 
+## test: run tests with race detector
 test:
 	go test -race -v -count=1 ./...
 
-lint:
+## lint: run golangci-lint
+lint: check-golangci-lint
 	golangci-lint run ./...
 
-migrate-up:
+## migrate-up: apply database migrations
+migrate-up: check-goose
 	goose -dir migrations postgres "$$DATABASE_URL" up
 
-migrate-down:
+## migrate-down: roll back the last migration
+migrate-down: check-goose
 	goose -dir migrations postgres "$$DATABASE_URL" down
 
-generate:
+## generate: regenerate sqlc query code
+generate: check-sqlc
 	sqlc generate
 
-docker-build:
+## docker-build: build the Docker image
+docker-build: check-docker
 	docker build -t $(BINARY):latest .
 
+## docker-run: build and run the Docker image
 docker-run: docker-build
 	docker run --rm -p 8080:8080 -p 9090:9090 --env-file .env $(BINARY):latest
 
+## clean: remove build artifacts and test cache
 clean:
 	rm -f $(BINARY)
 	go clean -testcache
+
+## tools: install pinned development tool versions
+tools:
+	@echo "Installing tools..."
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	go install github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
+	go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+	@echo "Tools installed to $$(go env GOPATH)/bin"
+
+## check-golangci-lint: verify golangci-lint is available
+check-golangci-lint:
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not found. Run 'make tools' to install."; exit 1; }
+
+## check-goose: verify goose is available
+check-goose:
+	@command -v goose >/dev/null 2>&1 || { echo "goose not found. Run 'make tools' to install."; exit 1; }
+
+## check-sqlc: verify sqlc is available
+check-sqlc:
+	@command -v sqlc >/dev/null 2>&1 || { echo "sqlc not found. Run 'make tools' to install."; exit 1; }
+
+## check-docker: verify docker is available
+check-docker:
+	@command -v docker >/dev/null 2>&1 || { echo "docker not found. Install from https://docs.docker.com/get-docker/"; exit 1; }
+
+## help: show this help
+help:
+	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/## //' | column -t -s ':'
