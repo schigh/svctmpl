@@ -41,14 +41,15 @@ changelog:
       - '^ci:'
       - '^chore:'
 
-brews:
-  - repository:
-      owner: schigh
-      name: homebrew-tap
-    homepage: https://github.com/schigh/svctmpl
-    description: Scaffold production-ready Go services from a decision genome
-    license: Apache-2.0
-    install: |
-      bin.install "svctmpl"
-    test: |
-      system "#{bin}/svctmpl", "--version"
+# Uncomment when schigh/homebrew-tap repo exists:
+# brews:
+#   - repository:
+#       owner: schigh
+#       name: homebrew-tap
+#     homepage: https://github.com/schigh/svctmpl
+#     description: Scaffold production-ready Go services from a decision genome
+#     license: Apache-2.0
+#     install: |
+#       bin.install "svctmpl"
+#     test: |
+#       system "#{bin}/svctmpl", "--version"
