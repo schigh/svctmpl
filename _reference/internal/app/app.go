@@ -1,0 +1,116 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/example/myservice/internal/config"
+	applog "github.com/example/myservice/internal/log"
+)
+
+// App is the top-level application container. It owns every major subsystem
+// and orchestrates startup, running, and graceful shutdown.
+type App struct {
+	Config     config.Config
+	Logger     *slog.Logger
+	DB         *pgxpool.Pool
+	HTTPServer *http.Server
+
+	closers []func(context.Context) error
+}
+
+// New initialises the application and all of its subsystems in dependency
+// order. If any step fails the partially-built App is not returned.
+func New(ctx context.Context) (*App, error) {
+	a := &App{}
+
+	if err := a.initConfig(); err != nil {
+		return nil, err
+	}
+	a.initLogger()
+
+	if err := a.initDatabase(ctx); err != nil {
+		return nil, err
+	}
+	if err := a.initOTel(); err != nil {
+		return nil, err
+	}
+	if err := a.initHTTPServer(); err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+// Run starts the HTTP server (and metrics server if OTel is enabled) and
+// blocks until the context is cancelled or a server returns a fatal error.
+// It then calls Shutdown to tear everything down gracefully.
+func (a *App) Run(ctx context.Context) error {
+	a.Logger.Info("http server starting", "addr", a.Config.HTTP.Addr())
+
+	srvErr := make(chan error, 1)
+	go func() {
+		if err := a.HTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			srvErr <- err
+		}
+		close(srvErr)
+	}()
+
+	select {
+	case <-ctx.Done():
+		a.Logger.Info("shutdown signal received")
+	case err := <-srvErr:
+		if err != nil {
+			return err
+		}
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	return a.Shutdown(shutdownCtx)
+}
+
+// Shutdown tears down subsystems in reverse registration order.
+func (a *App) Shutdown(ctx context.Context) error {
+	var errs []error
+	for i := len(a.closers) - 1; i >= 0; i-- {
+		if err := a.closers[i](ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	a.Logger.Info("shutdown complete")
+	return errors.Join(errs...)
+}
+
+// onShutdown registers a function to be called during Shutdown in reverse
+// order (last registered, first called).
+func (a *App) onShutdown(fn func(context.Context) error) {
+	a.closers = append(a.closers, fn)
+}
+
+// initConfig loads configuration from environment variables.
+func (a *App) initConfig() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	a.Config = cfg
+	return nil
+}
+
+// initLogger creates the structured logger and sets the slog default.
+// All subsequent log.Ctx(ctx) calls use this logger as the base.
+func (a *App) initLogger() {
+	a.Logger = applog.New(a.Config.Service.Environment)
+	applog.SetDefault(a.Logger)
+	a.Logger.Info("starting service",
+		"name", a.Config.Service.Name,
+		"env", a.Config.Service.Environment,
+	)
+}

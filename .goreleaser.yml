@@ -1,0 +1,54 @@
+version: 2
+
+project_name: svctmpl
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/svctmpl
+    binary: svctmpl
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+
+brews:
+  - repository:
+      owner: schigh
+      name: homebrew-tap
+    homepage: https://github.com/schigh/svctmpl
+    description: Scaffold production-ready Go services from a decision genome
+    license: Apache-2.0
+    install: |
+      bin.install "svctmpl"
+    test: |
+      system "#{bin}/svctmpl", "--version"

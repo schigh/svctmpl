@@ -1,0 +1,124 @@
+# Docker Compose configuration for [[ .ProjectName ]] local development.
+#
+# Usage:
+#   docker compose up -d        # start all services
+#   docker compose logs -f app  # follow app logs
+#   docker compose down -v      # tear down, removing volumes
+#
+# The postgres service runs the migrations on first boot via the
+# docker-entrypoint-initdb.d mount. The app waits for postgres to be
+# healthy before starting.
+
+services:
+[[ if .HasDatabase ]]
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — primary data store
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: [[ .ProjectName ]]
+    ports:
+      - "5432:5432"
+    volumes:
+      # Seed the database with the migration SQL on first start.
+      - ./migrations:/docker-entrypoint-initdb.d/:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d [[ .ProjectName ]]"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+[[ end ]]
+  # ---------------------------------------------------------------------------
+  # Application — the Go service
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+[[ if .HasDatabase ]]
+    depends_on:
+      postgres:
+        condition: service_healthy
+[[ end ]]
+    environment:
+      SERVICE_NAME: [[ .ProjectName ]]
+      SERVICE_ENV: dev
+[[ if .HasDatabase ]]
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: [[ .ProjectName ]]
+      DB_SSLMODE: disable
+      DB_MAX_CONNS: "10"
+[[ end ]]
+      HTTP_PORT: "8080"
+[[ if .HasOTel ]]
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: [[ .ProjectName ]]
+      OTEL_METRICS_PORT: "9090"
+[[ end ]]
+[[ if .HasOTelFull ]]
+      # Point the OTLP exporter at the collector.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+[[ end ]]
+    ports:
+      - "8080:8080"
+[[ if .HasOTel ]]
+      - "9090:9090"
+[[ end ]]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+[[ if .HasOTelFull ]]
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector — receives OTLP, exports to Prometheus
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    volumes:
+      - ./deploy/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  # ---------------------------------------------------------------------------
+  # Prometheus — metrics scraping and storage
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    depends_on:
+      - app
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards and visualization
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./deploy/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    ports:
+      - "3000:3000"
+[[ end ]]
+[[ if .HasDatabase ]]
+
+volumes:
+  pgdata:
+[[ end ]]

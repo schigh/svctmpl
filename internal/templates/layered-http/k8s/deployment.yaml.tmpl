@@ -1,0 +1,67 @@
+# Deployment for [[ .ProjectName ]].
+#
+# Customize:
+#   - Replace the image with your registry path (e.g. ghcr.io/example/[[ .ProjectName ]]:latest)
+#   - Adjust resource requests/limits for your workload
+#   - Add volume mounts if the service needs persistent storage
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: [[ .ProjectName ]]
+  namespace: [[ .ProjectName ]]
+  labels:
+    app: [[ .ProjectName ]]
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: [[ .ProjectName ]]
+  template:
+    metadata:
+      labels:
+        app: [[ .ProjectName ]]
+    spec:
+      containers:
+        - name: [[ .ProjectName ]]
+          # Replace with your container registry and tag.
+          image: ghcr.io/example/[[ .ProjectName ]]:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: [[ .ProjectName ]]-config
+[[ if .HasDatabase ]]
+            - secretRef:
+                name: [[ .ProjectName ]]-secret
+[[ end ]]
+          # Liveness probe restarts the container if /healthz fails.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness probe removes the pod from service endpoints
+          # until /readyz succeeds.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

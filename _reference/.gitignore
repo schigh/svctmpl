@@ -1,0 +1,27 @@
+# Binary
+myservice
+
+# Environment
+.env
+
+# Go
+vendor/
+*.test
+
+# Local tool binaries (built by `make tools`)
+tools/bin/
+
+# Coverage
+coverage.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+module [[ .ModulePath ]]
+
+go 1.23.0
+
+require (
+	github.com/go-chi/chi/v5 v5.2.1
+	github.com/google/uuid v1.6.0
+[[ if .HasDatabase ]]	github.com/jackc/pgx/v5 v5.7.4
+[[ end ]]	github.com/kelseyhightower/envconfig v1.4.0
+[[ if .HasOTel ]]	github.com/prometheus/client_golang v1.20.5
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0
+	go.opentelemetry.io/otel v1.35.0
+	go.opentelemetry.io/otel/exporters/prometheus v0.57.0
+	go.opentelemetry.io/otel/sdk v1.35.0
+	go.opentelemetry.io/otel/sdk/metric v1.35.0
+[[ end ]])

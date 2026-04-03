@@ -1,0 +1,123 @@
+name: layered-http
+description: HTTP service with hexagonal architecture, chi router, and modular app bootstrapping
+files:
+  - path: cmd/app/main.go.tmpl
+    output: cmd/app/main.go
+  - path: internal/app/app.go.tmpl
+    output: internal/app/app.go
+  - path: internal/app/database.go.tmpl
+    output: internal/app/database.go
+    requires: [database]
+  - path: internal/app/otel.go.tmpl
+    output: internal/app/otel.go
+    requires: [observability]
+  - path: internal/app/server.go.tmpl
+    output: internal/app/server.go
+  - path: internal/config/config.go.tmpl
+    output: internal/config/config.go
+  - path: internal/errs/errors.go.tmpl
+    output: internal/errs/errors.go
+  - path: internal/log/log.go.tmpl
+    output: internal/log/log.go
+  - path: internal/model/resource.go.tmpl
+    output: internal/model/resource.go
+  - path: internal/convert/resource.go.tmpl
+    output: internal/convert/resource.go
+  - path: internal/repository/resource.go.tmpl
+    output: internal/repository/resource.go
+    requires: [database]
+  - path: internal/repository/db.go.tmpl
+    output: internal/repository/db.go
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/repository/models.go.tmpl
+    output: internal/repository/models.go
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/repository/queries.sql.go.tmpl
+    output: internal/repository/queries.sql.go
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/repository/queries.sql.tmpl
+    output: internal/repository/queries.sql
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/service/repository.go.tmpl
+    output: internal/service/repository.go
+  - path: internal/service/resource.go.tmpl
+    output: internal/service/resource.go
+  - path: internal/transport/http/handler.go.tmpl
+    output: internal/transport/http/handler.go
+  - path: internal/transport/http/resource.go.tmpl
+    output: internal/transport/http/resource.go
+  - path: internal/transport/http/errors.go.tmpl
+    output: internal/transport/http/errors.go
+  - path: internal/transport/http/health.go.tmpl
+    output: internal/transport/http/health.go
+  - path: internal/transport/http/middleware.go.tmpl
+    output: internal/transport/http/middleware.go
+  - path: internal/transport/http/handler_test.go.tmpl
+    output: internal/transport/http/handler_test.go
+  - path: internal/transport/http/resource_test.go.tmpl
+    output: internal/transport/http/resource_test.go
+  - path: migrations/001_create_resources.sql.tmpl
+    output: migrations/001_create_resources.sql
+    requires: [database]
+  - path: sqlc.yaml.tmpl
+    output: sqlc.yaml
+    requires: [database, "db_tooling:sqlc"]
+  - path: Dockerfile.tmpl
+    output: Dockerfile
+    requires: [container]
+  - path: Makefile.tmpl
+    output: Makefile
+  - path: .github/workflows/ci.yml.tmpl
+    output: .github/workflows/ci.yml
+    requires: ["ci:github-actions"]
+  - path: tools/go.mod.tmpl
+    output: tools/go.mod
+  - path: tools/tools.go.tmpl
+    output: tools/tools.go
+  - path: go.mod.tmpl
+    output: go.mod
+  - path: .env.example.tmpl
+    output: .env.example
+  - path: .gitignore.tmpl
+    output: .gitignore
+  - path: README.md.tmpl
+    output: README.md
+  - path: docker-compose.yml.tmpl
+    output: docker-compose.yml
+    requires: [compose]
+  - path: deploy/otel-collector-config.yaml.tmpl
+    output: deploy/otel-collector-config.yaml
+    requires: [compose, "observability:otel-full"]
+  - path: deploy/prometheus.yml.tmpl
+    output: deploy/prometheus.yml
+    requires: [compose, "observability:otel-full"]
+  - path: deploy/grafana/datasources.yml.tmpl
+    output: deploy/grafana/datasources.yml
+    requires: [compose, "observability:otel-full"]
+  - path: k8s/namespace.yaml.tmpl
+    output: k8s/namespace.yaml
+    requires: [k8s]
+  - path: k8s/configmap.yaml.tmpl
+    output: k8s/configmap.yaml
+    requires: [k8s]
+  - path: k8s/secret.yaml.tmpl
+    output: k8s/secret.yaml
+    requires: [k8s, database]
+  - path: k8s/deployment.yaml.tmpl
+    output: k8s/deployment.yaml
+    requires: [k8s]
+  - path: k8s/service.yaml.tmpl
+    output: k8s/service.yaml
+    requires: [k8s]
+  - path: k8s/ingress.yaml.tmpl
+    output: k8s/ingress.yaml
+    requires: [k8s]
+  - path: k8s/hpa.yaml.tmpl
+    output: k8s/hpa.yaml
+    requires: [k8s]
+  - path: k8s/kustomization.yaml.tmpl
+    output: k8s/kustomization.yaml
+    requires: [k8s]
+  - path: Tiltfile.tmpl
+    output: Tiltfile
+    requires: [tilt]

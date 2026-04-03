@@ -1,0 +1,86 @@
+package config
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/kelseyhightower/envconfig"
+)
+
+// Config is the top-level configuration, assembled from environment variables
+// prefixed with SERVICE_.
+type Config struct {
+	Service  ServiceConfig
+[[ if .HasDatabase ]]	Database DatabaseConfig
+[[ end ]]	HTTP     HTTPConfig
+[[ if .HasOTel ]]	OTel     OTelConfig
+[[ end ]]}
+
+// ServiceConfig identifies the running service and its environment.
+type ServiceConfig struct {
+	Name        string `envconfig:"SERVICE_NAME" default:"[[ .ProjectName ]]"`
+	Environment string `envconfig:"SERVICE_ENV" default:"dev"`
+}
+[[ if .HasDatabase ]]
+// DatabaseConfig holds PostgreSQL connection parameters.
+type DatabaseConfig struct {
+	Host     string `envconfig:"DB_HOST" default:"localhost"`
+	Port     int    `envconfig:"DB_PORT" default:"5432"`
+	User     string `envconfig:"DB_USER" default:"postgres"`
+	Password string `envconfig:"DB_PASSWORD" default:"postgres"`
+	DBName   string `envconfig:"DB_NAME" default:"[[ .ProjectName ]]"`
+	SSLMode  string `envconfig:"DB_SSLMODE" default:"disable"`
+	MaxConns int32  `envconfig:"DB_MAX_CONNS" default:"10"`
+}
+
+// DSN returns a PostgreSQL connection string.
+func (d DatabaseConfig) DSN() string {
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
+		d.User, d.Password, d.Host, d.Port, d.DBName, d.SSLMode,
+	)
+}
+[[ end ]]
+// HTTPConfig controls the HTTP listener.
+type HTTPConfig struct {
+	Port         int           `envconfig:"HTTP_PORT" default:"8080"`
+	ReadTimeout  time.Duration `envconfig:"HTTP_READ_TIMEOUT" default:"5s"`
+	WriteTimeout time.Duration `envconfig:"HTTP_WRITE_TIMEOUT" default:"10s"`
+	IdleTimeout  time.Duration `envconfig:"HTTP_IDLE_TIMEOUT" default:"120s"`
+}
+
+// Addr returns the listen address in host:port form.
+func (h HTTPConfig) Addr() string {
+	return fmt.Sprintf(":%d", h.Port)
+}
+[[ if .HasOTel ]]
+// OTelConfig controls OpenTelemetry instrumentation.
+type OTelConfig struct {
+	Enabled     bool   `envconfig:"OTEL_ENABLED" default:"false"`
+	ServiceName string `envconfig:"OTEL_SERVICE_NAME" default:"[[ .ProjectName ]]"`
+	MetricsPort int    `envconfig:"OTEL_METRICS_PORT" default:"9090"`
+}
+
+// MetricsAddr returns the metrics listen address.
+func (o OTelConfig) MetricsAddr() string {
+	return fmt.Sprintf(":%d", o.MetricsPort)
+}
+[[ end ]]
+// Load reads configuration from environment variables. The prefix is empty
+// because each field specifies its own envconfig key.
+func Load() (Config, error) {
+	var cfg Config
+	if err := envconfig.Process("", &cfg.Service); err != nil {
+		return cfg, fmt.Errorf("loading service config: %w", err)
+	}
+[[ if .HasDatabase ]]	if err := envconfig.Process("", &cfg.Database); err != nil {
+		return cfg, fmt.Errorf("loading database config: %w", err)
+	}
+[[ end ]]	if err := envconfig.Process("", &cfg.HTTP); err != nil {
+		return cfg, fmt.Errorf("loading http config: %w", err)
+	}
+[[ if .HasOTel ]]	if err := envconfig.Process("", &cfg.OTel); err != nil {
+		return cfg, fmt.Errorf("loading otel config: %w", err)
+	}
+[[ end ]]	return cfg, nil
+}

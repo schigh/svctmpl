@@ -1,0 +1,27 @@
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/example/myservice/internal/app"
+)
+
+func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	application, err := app.New(ctx)
+	if err != nil {
+		slog.Error("failed to initialize application", "error", err)
+		os.Exit(1)
+	}
+
+	if err := application.Run(ctx); err != nil {
+		slog.Error("application error", "error", err)
+		os.Exit(1)
+	}
+}

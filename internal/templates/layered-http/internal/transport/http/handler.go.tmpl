@@ -1,0 +1,78 @@
+package http
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
+[[ if .HasOTel ]]	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+[[ end ]]
+	"[[ .ModulePath ]]/internal/model"
+)
+
+// Service defines the operations the HTTP transport layer requires from the
+// business logic layer. This interface is defined by the consumer (transport)
+// rather than the implementor (service package).
+type Service interface {
+	CreateResource(ctx context.Context, name, description string) (*model.Resource, error)
+	GetResource(ctx context.Context, id uuid.UUID) (*model.Resource, error)
+	ListResources(ctx context.Context) ([]*model.Resource, error)
+	UpdateResource(ctx context.Context, id uuid.UUID, name, description string) (*model.Resource, error)
+	DeleteResource(ctx context.Context, id uuid.UUID) error
+}
+
+// DBPinger is satisfied by any type that can verify database connectivity.
+type DBPinger interface {
+	Ping(ctx context.Context) error
+}
+
+// Handler is the HTTP transport adapter. It holds all dependencies needed by
+// the route handlers and exposes them as methods.
+type Handler struct {
+	svc Service
+	db  DBPinger
+}
+
+// NewHandler creates a fully-wired chi router with all middleware and routes
+// registered. It implements http.Handler and is ready to be used as the
+// handler for an *http.Server.
+func NewHandler(svc Service, db DBPinger, otelEnabled bool) http.Handler {
+	h := &Handler{
+		svc: svc,
+		db:  db,
+	}
+
+	r := chi.NewRouter()
+
+	// --- Middleware chain ---
+	// requestID stashes request_id into the log context via log.Stash.
+	// All downstream log.Ctx(ctx) calls include it automatically.
+	r.Use(requestID)
+	r.Use(logging)
+	r.Use(chimw.Recoverer)
+[[ if .HasOTel ]]
+	if otelEnabled {
+		r.Use(func(next http.Handler) http.Handler {
+			return otelhttp.NewHandler(next, "http.request")
+		})
+	}
+[[ end ]]
+	// --- Health routes ---
+	r.Get("/healthz", h.Healthz)
+	r.Get("/readyz", h.Readyz)
+
+	// --- Resource routes ---
+	r.Route("/api/resources", func(r chi.Router) {
+		r.Post("/", h.CreateResource)
+		r.Get("/", h.ListResources)
+		r.Route("/{id}", func(r chi.Router) {
+			r.Get("/", h.GetResource)
+			r.Put("/", h.UpdateResource)
+			r.Delete("/", h.DeleteResource)
+		})
+	})
+
+	return r
+}

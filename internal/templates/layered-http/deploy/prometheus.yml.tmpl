@@ -1,0 +1,15 @@
+# Prometheus scrape configuration.
+#
+# Scrapes metrics from the application's /metrics endpoint and the
+# OpenTelemetry Collector's Prometheus exporter.
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: app
+    static_configs:
+      - targets: ['[[ .ProjectName ]]:9090']
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8889']

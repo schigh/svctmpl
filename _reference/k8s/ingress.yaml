@@ -1,0 +1,36 @@
+# Ingress routes external traffic to the myservice ClusterIP Service.
+#
+# Customize:
+#   - Replace "myservice.example.com" with your actual domain
+#   - Uncomment the TLS section and create a matching Secret to enable HTTPS
+#   - Adjust annotations for your ingress controller if not using nginx
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myservice
+  namespace: myservice
+  labels:
+    app: myservice
+  annotations:
+    # nginx ingress controller annotations.
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Uncomment to enable automatic TLS via cert-manager:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: myservice.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myservice
+                port:
+                  number: 80
+  # Uncomment to enable TLS. Create a TLS Secret or use cert-manager.
+  # tls:
+  #   - hosts:
+  #       - myservice.example.com
+  #     secretName: myservice-tls

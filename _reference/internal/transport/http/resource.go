@@ -1,0 +1,118 @@
+package http
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+
+	"github.com/example/myservice/internal/model"
+)
+
+// createRequest is the JSON body for resource creation.
+type createRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// updateRequest is the JSON body for resource updates.
+type updateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// parseUUID extracts and validates a UUID from the given string. On failure it
+// writes a 400 response and returns false.
+func parseUUID(w http.ResponseWriter, s string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_ID", "invalid UUID format")
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+// CreateResource handles POST /api/resources.
+func (h *Handler) CreateResource(w http.ResponseWriter, r *http.Request) {
+	var req createRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+
+	res, err := h.svc.CreateResource(r.Context(), req.Name, req.Description)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, res)
+}
+
+// ListResources handles GET /api/resources.
+func (h *Handler) ListResources(w http.ResponseWriter, r *http.Request) {
+	resources, err := h.svc.ListResources(r.Context())
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+	if resources == nil {
+		resources = make([]*model.Resource, 0)
+	}
+	respondJSON(w, http.StatusOK, resources)
+}
+
+// GetResource handles GET /api/resources/{id}.
+func (h *Handler) GetResource(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(w, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+
+	res, err := h.svc.GetResource(r.Context(), id)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, res)
+}
+
+// UpdateResource handles PUT /api/resources/{id}.
+func (h *Handler) UpdateResource(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(w, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+
+	var req updateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+
+	res, err := h.svc.UpdateResource(r.Context(), id, req.Name, req.Description)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, res)
+}
+
+// DeleteResource handles DELETE /api/resources/{id}.
+func (h *Handler) DeleteResource(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(w, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+
+	err := h.svc.DeleteResource(r.Context(), id)
+	if err != nil {
+		respondServiceError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

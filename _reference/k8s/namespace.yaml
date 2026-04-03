@@ -1,0 +1,5 @@
+# Namespace isolates all myservice resources from other workloads.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: myservice

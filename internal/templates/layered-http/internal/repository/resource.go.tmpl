@@ -1,0 +1,112 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"[[ .ModulePath ]]/internal/convert"
+	"[[ .ModulePath ]]/internal/errs"
+	"[[ .ModulePath ]]/internal/model"
+)
+
+// ResourceRepository wraps sqlc-generated queries with domain model
+// conversions and error mapping.
+type ResourceRepository struct {
+	q *Queries
+}
+
+// NewResourceRepository creates a repository backed by the given connection pool.
+func NewResourceRepository(pool *pgxpool.Pool) *ResourceRepository {
+	return &ResourceRepository{q: New(pool)}
+}
+
+// Create inserts a new resource and returns the created row.
+func (r *ResourceRepository) Create(ctx context.Context, res *model.Resource) (*model.Resource, error) {
+	row, err := r.q.CreateResource(ctx, CreateResourceParams{
+		Name:        res.Name,
+		Description: res.Description,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating resource: %w", err)
+	}
+	return resourceToModel(row), nil
+}
+
+// GetByID retrieves a single resource by primary key.
+func (r *ResourceRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Resource, error) {
+	row, err := r.q.GetResource(ctx, convert.UUIDToPostgres(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errs.ErrNotFound
+		}
+		return nil, fmt.Errorf("getting resource %s: %w", id, err)
+	}
+	return resourceToModel(row), nil
+}
+
+// List returns all resources ordered by creation time descending.
+func (r *ResourceRepository) List(ctx context.Context) ([]*model.Resource, error) {
+	rows, err := r.q.ListResources(ctx, ListResourcesParams{
+		Limit:  math.MaxInt32,
+		Offset: 0,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing resources: %w", err)
+	}
+	return resourcesToModels(rows), nil
+}
+
+// Update modifies an existing resource's name and description.
+func (r *ResourceRepository) Update(ctx context.Context, res *model.Resource) (*model.Resource, error) {
+	row, err := r.q.UpdateResource(ctx, UpdateResourceParams{
+		Name:        res.Name,
+		Description: res.Description,
+		ID:          convert.UUIDToPostgres(res.ID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errs.ErrNotFound
+		}
+		return nil, fmt.Errorf("updating resource %s: %w", res.ID, err)
+	}
+	return resourceToModel(row), nil
+}
+
+// Delete removes a resource by primary key. Returns errs.ErrNotFound if no row
+// was affected.
+func (r *ResourceRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.q.db.Exec(ctx, deleteResource, convert.UUIDToPostgres(id))
+	if err != nil {
+		return fmt.Errorf("deleting resource %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
+}
+
+// resourceToModel converts a sqlc-generated Resource to a domain model.Resource.
+func resourceToModel(r Resource) *model.Resource {
+	return &model.Resource{
+		ID:          convert.PostgresUUIDToUUID(r.ID),
+		Name:        r.Name,
+		Description: r.Description,
+		CreatedAt:   r.CreatedAt.Time,
+		UpdatedAt:   r.UpdatedAt.Time,
+	}
+}
+
+// resourcesToModels converts a slice of sqlc-generated Resources to domain models.
+func resourcesToModels(rs []Resource) []*model.Resource {
+	out := make([]*model.Resource, len(rs))
+	for i, r := range rs {
+		out[i] = resourceToModel(r)
+	}
+	return out
+}
