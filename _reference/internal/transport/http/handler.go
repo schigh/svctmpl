@@ -28,10 +28,22 @@ type DBPinger interface {
 	Ping(ctx context.Context) error
 }
 
+// Handler is the HTTP transport adapter. It holds all dependencies needed by
+// the route handlers and exposes them as methods.
+type Handler struct {
+	svc Service
+	db  DBPinger
+}
+
 // NewHandler creates a fully-wired chi router with all middleware and routes
 // registered. It implements http.Handler and is ready to be used as the
 // handler for an *http.Server.
 func NewHandler(svc Service, db DBPinger, otelEnabled bool) http.Handler {
+	h := &Handler{
+		svc: svc,
+		db:  db,
+	}
+
 	r := chi.NewRouter()
 
 	// --- Middleware chain ---
@@ -48,17 +60,17 @@ func NewHandler(svc Service, db DBPinger, otelEnabled bool) http.Handler {
 	}
 
 	// --- Health routes ---
-	r.Get("/healthz", healthz)
-	r.Get("/readyz", readyz(db))
+	r.Get("/healthz", h.Healthz)
+	r.Get("/readyz", h.Readyz)
 
 	// --- Resource routes ---
 	r.Route("/api/resources", func(r chi.Router) {
-		r.Post("/", createResource(svc))
-		r.Get("/", listResources(svc))
+		r.Post("/", h.CreateResource)
+		r.Get("/", h.ListResources)
 		r.Route("/{id}", func(r chi.Router) {
-			r.Get("/", getResource(svc))
-			r.Put("/", updateResource(svc))
-			r.Delete("/", deleteResource(svc))
+			r.Get("/", h.GetResource)
+			r.Put("/", h.UpdateResource)
+			r.Delete("/", h.DeleteResource)
 		})
 	})
 
