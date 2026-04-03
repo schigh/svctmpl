@@ -252,6 +252,187 @@ func TestEvaluateConditionsEmptyRequires(t *testing.T) {
 	}
 }
 
+func TestNewTemplateData_BooleanFlags(t *testing.T) {
+	g := newTestGenome()
+	g.Choices.Database = "postgres"
+	g.Choices.DBTooling = "sqlc"
+	g.Choices.Migrations = "goose"
+	g.Choices.Observability = "otel-full"
+	g.Choices.CI = "github-actions"
+	g.Choices.Container = "dockerfile"
+	g.Choices.Compose = true
+	g.Choices.K8s = true
+	g.Choices.Tilt = false
+
+	td := NewTemplateData(g)
+
+	if !td.HasDatabase {
+		t.Error("expected HasDatabase=true for postgres")
+	}
+	if !td.HasDBTooling {
+		t.Error("expected HasDBTooling=true for sqlc")
+	}
+	if !td.HasMigrations {
+		t.Error("expected HasMigrations=true for goose")
+	}
+	if !td.HasOTel {
+		t.Error("expected HasOTel=true for otel-full")
+	}
+	if !td.HasOTelFull {
+		t.Error("expected HasOTelFull=true for otel-full")
+	}
+	if !td.HasCI {
+		t.Error("expected HasCI=true for github-actions")
+	}
+	if !td.HasContainer {
+		t.Error("expected HasContainer=true for dockerfile")
+	}
+	if !td.HasCompose {
+		t.Error("expected HasCompose=true")
+	}
+	if !td.HasK8s {
+		t.Error("expected HasK8s=true")
+	}
+	if td.HasTilt {
+		t.Error("expected HasTilt=false")
+	}
+}
+
+func TestNewTemplateData_NoneValues(t *testing.T) {
+	g := newTestGenome()
+	g.Choices.Database = "none"
+	g.Choices.DBTooling = "none"
+	g.Choices.Migrations = "none"
+	g.Choices.Observability = "none"
+	g.Choices.CI = "none"
+	g.Choices.Container = "none"
+	g.Choices.Compose = false
+	g.Choices.K8s = false
+	g.Choices.Tilt = false
+
+	td := NewTemplateData(g)
+
+	if td.HasDatabase {
+		t.Error("expected HasDatabase=false for none")
+	}
+	if td.HasDBTooling {
+		t.Error("expected HasDBTooling=false for none")
+	}
+	if td.HasMigrations {
+		t.Error("expected HasMigrations=false for none")
+	}
+	if td.HasOTel {
+		t.Error("expected HasOTel=false for none")
+	}
+	if td.HasOTelFull {
+		t.Error("expected HasOTelFull=false for none")
+	}
+	if td.HasCI {
+		t.Error("expected HasCI=false for none")
+	}
+	if td.HasContainer {
+		t.Error("expected HasContainer=false for none")
+	}
+	if td.HasCompose {
+		t.Error("expected HasCompose=false")
+	}
+	if td.HasK8s {
+		t.Error("expected HasK8s=false")
+	}
+}
+
+func TestNewTemplateData_OTelTracesOnly(t *testing.T) {
+	g := newTestGenome()
+	g.Choices.Observability = "otel-traces-only"
+
+	td := NewTemplateData(g)
+
+	if !td.HasOTel {
+		t.Error("expected HasOTel=true for otel-traces-only")
+	}
+	if td.HasOTelFull {
+		t.Error("expected HasOTelFull=false for otel-traces-only")
+	}
+}
+
+func TestRenderDatabaseNone_ExcludesDBFiles(t *testing.T) {
+	manifest := `name: test
+description: test profile
+files:
+  - path: main.go.tmpl
+    output: main.go
+  - path: db.go.tmpl
+    output: repository/db.go
+    requires: [database]
+  - path: migration.sql.tmpl
+    output: migrations/001.sql
+    requires: [database]
+  - path: sqlc.yaml.tmpl
+    output: sqlc.yaml
+    requires: [database, "db_tooling:sqlc"]
+`
+	p := newTestProfile(manifest, map[string]string{
+		"main.go.tmpl":      `package main`,
+		"db.go.tmpl":        `package db`,
+		"migration.sql.tmpl": `CREATE TABLE x;`,
+		"sqlc.yaml.tmpl":    `version: 1`,
+	})
+
+	g := newTestGenome()
+	g.Choices.Database = "none"
+	g.Choices.DBTooling = "none"
+	g.Choices.Migrations = "none"
+
+	eng := New()
+	outputDir := filepath.Join(t.TempDir(), "output")
+	if err := eng.Render(g, p, outputDir); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// main.go should exist
+	if _, err := os.Stat(filepath.Join(outputDir, "main.go")); err != nil {
+		t.Errorf("expected main.go to exist: %v", err)
+	}
+	// DB-dependent files should not exist
+	for _, f := range []string{"repository/db.go", "migrations/001.sql", "sqlc.yaml"} {
+		if _, err := os.Stat(filepath.Join(outputDir, f)); !os.IsNotExist(err) {
+			t.Errorf("expected %s to not exist when database=none", f)
+		}
+	}
+}
+
+func TestRenderComposeFalse_ExcludesComposeFiles(t *testing.T) {
+	manifest := `name: test
+description: test profile
+files:
+  - path: main.go.tmpl
+    output: main.go
+  - path: compose.yml.tmpl
+    output: docker-compose.yml
+    requires: [compose]
+`
+	p := newTestProfile(manifest, map[string]string{
+		"main.go.tmpl":     `package main`,
+		"compose.yml.tmpl": `version: "3"`,
+	})
+
+	g := newTestGenome()
+	g.Choices.Compose = false
+
+	eng := New()
+	outputDir := filepath.Join(t.TempDir(), "output")
+	if err := eng.Render(g, p, outputDir); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "main.go")); err != nil {
+		t.Errorf("expected main.go to exist: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "docker-compose.yml")); !os.IsNotExist(err) {
+		t.Errorf("expected docker-compose.yml to not exist when compose=false")
+	}
+}
+
 func TestRenderVerbose(t *testing.T) {
 	manifest := `name: test
 description: test profile

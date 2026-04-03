@@ -273,6 +273,104 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDefaultPassesValidate(t *testing.T) {
+	g := Default()
+	g.Project.Name = "validservice"
+	g.Project.Module = "github.com/acme/validservice"
+
+	if err := g.Validate(); err != nil {
+		t.Fatalf("Default() genome should pass validation: %v", err)
+	}
+}
+
+func TestBooleanFieldsYAMLRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "genome.yaml")
+
+	g := Default()
+	g.Project.Name = "booltest"
+	g.Project.Module = "github.com/acme/booltest"
+	g.Choices.Compose = true
+	g.Choices.K8s = false
+	g.Choices.Tilt = true
+
+	if err := g.Save(p); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	loaded, err := Load(p)
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	if loaded.Choices.Compose != true {
+		t.Error("expected Compose=true after round-trip")
+	}
+	if loaded.Choices.K8s != false {
+		t.Error("expected K8s=false after round-trip")
+	}
+	if loaded.Choices.Tilt != true {
+		t.Error("expected Tilt=true after round-trip")
+	}
+}
+
+func TestProjectNameWithBrackets(t *testing.T) {
+	g := Default()
+	g.Project.Name = "bad[[name"
+	g.Project.Module = "github.com/acme/badname"
+
+	err := g.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for name with brackets")
+	}
+	var target *ErrValidation
+	if !errors.As(err, &target) {
+		t.Fatalf("expected ErrValidation, got %T: %v", err, err)
+	}
+}
+
+func TestModulePathWithBrackets(t *testing.T) {
+	g := Default()
+	g.Project.Name = "myservice"
+	g.Project.Module = "github.com/acme/my[[service"
+
+	err := g.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for module with brackets")
+	}
+	var target *ErrValidation
+	if !errors.As(err, &target) {
+		t.Fatalf("expected ErrValidation, got %T: %v", err, err)
+	}
+}
+
+func TestAllAxesReturnsExpectedAxes(t *testing.T) {
+	axes := AllAxes()
+	expected := map[string]bool{
+		"transport": true, "router": true, "database": true,
+		"db_tooling": true, "migrations": true, "structure": true,
+		"observability": true, "logging": true, "config": true,
+		"ci": true, "container": true,
+	}
+	if len(axes) != len(expected) {
+		t.Fatalf("expected %d axes, got %d", len(expected), len(axes))
+	}
+	for _, a := range axes {
+		if !expected[a] {
+			t.Errorf("unexpected axis: %s", a)
+		}
+	}
+}
+
+func TestAllAxesReturnsCopy(t *testing.T) {
+	a1 := AllAxes()
+	a2 := AllAxes()
+	a1[0] = "mutated"
+	if a2[0] == "mutated" {
+		t.Error("AllAxes should return a copy, not the original slice")
+	}
+}
+
 func TestAllowedValuesRouter(t *testing.T) {
 	vals := AllowedValues("router")
 	if len(vals) != 2 {
