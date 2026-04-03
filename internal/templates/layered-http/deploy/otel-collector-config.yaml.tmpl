@@ -15,6 +15,8 @@ receivers:
 exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
+  debug:
+    verbosity: basic
 
 processors:
   batch:
@@ -28,4 +30,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: []
+      exporters: [debug]
