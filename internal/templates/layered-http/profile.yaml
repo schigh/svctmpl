@@ -21,9 +21,20 @@ files:
     output: internal/log/log.go
   - path: internal/model/resource.go.tmpl
     output: internal/model/resource.go
+  - path: internal/convert/resource.go.tmpl
+    output: internal/convert/resource.go
   - path: internal/repository/resource.go.tmpl
     output: internal/repository/resource.go
     requires: [database]
+  - path: internal/repository/db.go.tmpl
+    output: internal/repository/db.go
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/repository/models.go.tmpl
+    output: internal/repository/models.go
+    requires: [database, "db_tooling:sqlc"]
+  - path: internal/repository/queries.sql.go.tmpl
+    output: internal/repository/queries.sql.go
+    requires: [database, "db_tooling:sqlc"]
   - path: internal/repository/queries.sql.tmpl
     output: internal/repository/queries.sql
     requires: [database, "db_tooling:sqlc"]

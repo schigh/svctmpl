@@ -4,116 +4,83 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/example/myservice/internal/convert"
 	"github.com/example/myservice/internal/errs"
 	"github.com/example/myservice/internal/model"
 )
 
-// --- SQL queries (inline constants, sqlc-style) ---
-
-const queryCreate = `
-INSERT INTO resources (name, description)
-VALUES ($1, $2)
-RETURNING id, name, description, created_at, updated_at`
-
-const queryGetByID = `
-SELECT id, name, description, created_at, updated_at
-FROM resources
-WHERE id = $1`
-
-const queryList = `
-SELECT id, name, description, created_at, updated_at
-FROM resources
-ORDER BY created_at DESC`
-
-const queryUpdate = `
-UPDATE resources
-SET name = $1, description = $2, updated_at = NOW()
-WHERE id = $3
-RETURNING id, name, description, created_at, updated_at`
-
-const queryDelete = `
-DELETE FROM resources WHERE id = $1`
-
-// PgxResourceRepository implements the ResourceRepository interface defined
-// in the service package using pgx/v5.
-type PgxResourceRepository struct {
-	pool *pgxpool.Pool
+// ResourceRepository wraps sqlc-generated queries with domain model
+// conversions and error mapping.
+type ResourceRepository struct {
+	q *Queries
 }
 
 // NewResourceRepository creates a repository backed by the given connection pool.
-func NewResourceRepository(pool *pgxpool.Pool) *PgxResourceRepository {
-	return &PgxResourceRepository{pool: pool}
+func NewResourceRepository(pool *pgxpool.Pool) *ResourceRepository {
+	return &ResourceRepository{q: New(pool)}
 }
 
 // Create inserts a new resource and returns the created row.
-func (r *PgxResourceRepository) Create(ctx context.Context, res *model.Resource) (*model.Resource, error) {
-	var out model.Resource
-	err := r.pool.QueryRow(ctx, queryCreate, res.Name, res.Description).
-		Scan(&out.ID, &out.Name, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+func (r *ResourceRepository) Create(ctx context.Context, res *model.Resource) (*model.Resource, error) {
+	row, err := r.q.CreateResource(ctx, CreateResourceParams{
+		Name:        res.Name,
+		Description: res.Description,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("creating resource: %w", err)
 	}
-	return &out, nil
+	return resourceToModel(row), nil
 }
 
 // GetByID retrieves a single resource by primary key.
-func (r *PgxResourceRepository) GetByID(ctx context.Context, id string) (*model.Resource, error) {
-	var out model.Resource
-	err := r.pool.QueryRow(ctx, queryGetByID, id).
-		Scan(&out.ID, &out.Name, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+func (r *ResourceRepository) GetByID(ctx context.Context, id string) (*model.Resource, error) {
+	row, err := r.q.GetResource(ctx, convert.StringToUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound
 		}
 		return nil, fmt.Errorf("getting resource %s: %w", id, err)
 	}
-	return &out, nil
+	return resourceToModel(row), nil
 }
 
 // List returns all resources ordered by creation time descending.
-func (r *PgxResourceRepository) List(ctx context.Context) ([]*model.Resource, error) {
-	rows, err := r.pool.Query(ctx, queryList)
+func (r *ResourceRepository) List(ctx context.Context) ([]*model.Resource, error) {
+	rows, err := r.q.ListResources(ctx, ListResourcesParams{
+		Limit:  math.MaxInt32,
+		Offset: 0,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing resources: %w", err)
 	}
-	defer rows.Close()
-
-	var resources []*model.Resource
-	for rows.Next() {
-		var res model.Resource
-		if err := rows.Scan(&res.ID, &res.Name, &res.Description, &res.CreatedAt, &res.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("scanning resource row: %w", err)
-		}
-		resources = append(resources, &res)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating resource rows: %w", err)
-	}
-	return resources, nil
+	return resourcesToModels(rows), nil
 }
 
 // Update modifies an existing resource's name and description.
-func (r *PgxResourceRepository) Update(ctx context.Context, res *model.Resource) (*model.Resource, error) {
-	var out model.Resource
-	err := r.pool.QueryRow(ctx, queryUpdate, res.Name, res.Description, res.ID).
-		Scan(&out.ID, &out.Name, &out.Description, &out.CreatedAt, &out.UpdatedAt)
+func (r *ResourceRepository) Update(ctx context.Context, res *model.Resource) (*model.Resource, error) {
+	row, err := r.q.UpdateResource(ctx, UpdateResourceParams{
+		Name:        res.Name,
+		Description: res.Description,
+		ID:          convert.StringToUUID(res.ID),
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound
 		}
 		return nil, fmt.Errorf("updating resource %s: %w", res.ID, err)
 	}
-	return &out, nil
+	return resourceToModel(row), nil
 }
 
 // Delete removes a resource by primary key. Returns errs.ErrNotFound if no row
 // was affected.
-func (r *PgxResourceRepository) Delete(ctx context.Context, id string) error {
-	tag, err := r.pool.Exec(ctx, queryDelete, id)
+func (r *ResourceRepository) Delete(ctx context.Context, id string) error {
+	tag, err := r.q.db.Exec(ctx, deleteResource, convert.StringToUUID(id))
 	if err != nil {
 		return fmt.Errorf("deleting resource %s: %w", id, err)
 	}
@@ -121,4 +88,24 @@ func (r *PgxResourceRepository) Delete(ctx context.Context, id string) error {
 		return errs.ErrNotFound
 	}
 	return nil
+}
+
+// resourceToModel converts a sqlc-generated Resource to a domain model.Resource.
+func resourceToModel(r Resource) *model.Resource {
+	return &model.Resource{
+		ID:          convert.UUIDToString(r.ID),
+		Name:        r.Name,
+		Description: r.Description,
+		CreatedAt:   r.CreatedAt.Time,
+		UpdatedAt:   r.UpdatedAt.Time,
+	}
+}
+
+// resourcesToModels converts a slice of sqlc-generated Resources to domain models.
+func resourcesToModels(rs []Resource) []*model.Resource {
+	out := make([]*model.Resource, len(rs))
+	for i, r := range rs {
+		out[i] = resourceToModel(r)
+	}
+	return out
 }
