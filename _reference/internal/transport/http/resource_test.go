@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/example/myservice/internal/errs"
 	"github.com/example/myservice/internal/model"
 	transporthttp "github.com/example/myservice/internal/transport/http"
@@ -20,12 +22,11 @@ import (
 // interface for transport-level tests.
 type memService struct {
 	mu    sync.RWMutex
-	items map[string]*model.Resource
-	seq   int
+	items map[uuid.UUID]*model.Resource
 }
 
 func newMemService() *memService {
-	return &memService{items: make(map[string]*model.Resource)}
+	return &memService{items: make(map[uuid.UUID]*model.Resource)}
 }
 
 func (m *memService) CreateResource(_ context.Context, name, description string) (*model.Resource, error) {
@@ -35,8 +36,7 @@ func (m *memService) CreateResource(_ context.Context, name, description string)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.seq++
-	id := fmt.Sprintf("00000000-0000-0000-0000-%012d", m.seq)
+	id := uuid.New()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	res := &model.Resource{
 		ID:          id,
@@ -49,7 +49,7 @@ func (m *memService) CreateResource(_ context.Context, name, description string)
 	return res, nil
 }
 
-func (m *memService) GetResource(_ context.Context, id string) (*model.Resource, error) {
+func (m *memService) GetResource(_ context.Context, id uuid.UUID) (*model.Resource, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -71,7 +71,7 @@ func (m *memService) ListResources(_ context.Context) ([]*model.Resource, error)
 	return out, nil
 }
 
-func (m *memService) UpdateResource(_ context.Context, id, name, description string) (*model.Resource, error) {
+func (m *memService) UpdateResource(_ context.Context, id uuid.UUID, name, description string) (*model.Resource, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%w: name is required", errs.ErrInvalid)
 	}
@@ -88,7 +88,7 @@ func (m *memService) UpdateResource(_ context.Context, id, name, description str
 	return res, nil
 }
 
-func (m *memService) DeleteResource(_ context.Context, id string) error {
+func (m *memService) DeleteResource(_ context.Context, id uuid.UUID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -126,8 +126,8 @@ func TestCreateResource(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if res.ID == "" {
-		t.Error("expected non-empty ID")
+	if res.ID == uuid.Nil {
+		t.Error("expected non-nil ID")
 	}
 	if res.Name != "test-resource" {
 		t.Errorf("expected name \"test-resource\", got %q", res.Name)
@@ -186,7 +186,7 @@ func TestGetResource(t *testing.T) {
 	createResp.Body.Close()
 
 	// Fetch by ID.
-	resp, err := http.Get(srv.URL + "/api/resources/" + created.ID)
+	resp, err := http.Get(srv.URL + "/api/resources/" + created.ID.String())
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestGetResourceNotFound(t *testing.T) {
 	srv := newTestServer(svc)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/resources/nonexistent")
+	resp, err := http.Get(srv.URL + "/api/resources/" + uuid.New().String())
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestUpdateResource(t *testing.T) {
 
 	// Update.
 	updateBody := `{"name":"updated","description":"new"}`
-	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/resources/"+created.ID, bytes.NewBufferString(updateBody))
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/resources/"+created.ID.String(), bytes.NewBufferString(updateBody))
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
@@ -335,7 +335,7 @@ func TestUpdateResourceNotFound(t *testing.T) {
 	defer srv.Close()
 
 	body := `{"name":"ghost","description":"nope"}`
-	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/resources/nonexistent", bytes.NewBufferString(body))
+	req, err := http.NewRequest(http.MethodPut, srv.URL+"/api/resources/"+uuid.New().String(), bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestDeleteResource(t *testing.T) {
 	createResp.Body.Close()
 
 	// Delete.
-	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/resources/"+created.ID, nil)
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/resources/"+created.ID.String(), nil)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestDeleteResource(t *testing.T) {
 	}
 
 	// Verify gone.
-	getResp, err := http.Get(srv.URL + "/api/resources/" + created.ID)
+	getResp, err := http.Get(srv.URL + "/api/resources/" + created.ID.String())
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestDeleteResourceNotFound(t *testing.T) {
 	srv := newTestServer(svc)
 	defer srv.Close()
 
-	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/resources/nonexistent", nil)
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+"/api/resources/"+uuid.New().String(), nil)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}

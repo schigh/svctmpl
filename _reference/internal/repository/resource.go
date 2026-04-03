@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -38,8 +39,8 @@ func (r *ResourceRepository) Create(ctx context.Context, res *model.Resource) (*
 }
 
 // GetByID retrieves a single resource by primary key.
-func (r *ResourceRepository) GetByID(ctx context.Context, id string) (*model.Resource, error) {
-	row, err := r.q.GetResource(ctx, convert.StringToUUID(id))
+func (r *ResourceRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Resource, error) {
+	row, err := r.q.GetResource(ctx, convert.UUIDToPostgres(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound
@@ -66,7 +67,7 @@ func (r *ResourceRepository) Update(ctx context.Context, res *model.Resource) (*
 	row, err := r.q.UpdateResource(ctx, UpdateResourceParams{
 		Name:        res.Name,
 		Description: res.Description,
-		ID:          convert.StringToUUID(res.ID),
+		ID:          convert.UUIDToPostgres(res.ID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -79,8 +80,8 @@ func (r *ResourceRepository) Update(ctx context.Context, res *model.Resource) (*
 
 // Delete removes a resource by primary key. Returns errs.ErrNotFound if no row
 // was affected.
-func (r *ResourceRepository) Delete(ctx context.Context, id string) error {
-	tag, err := r.q.db.Exec(ctx, deleteResource, convert.StringToUUID(id))
+func (r *ResourceRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.q.db.Exec(ctx, deleteResource, convert.UUIDToPostgres(id))
 	if err != nil {
 		return fmt.Errorf("deleting resource %s: %w", id, err)
 	}
@@ -93,7 +94,7 @@ func (r *ResourceRepository) Delete(ctx context.Context, id string) error {
 // resourceToModel converts a sqlc-generated Resource to a domain model.Resource.
 func resourceToModel(r Resource) *model.Resource {
 	return &model.Resource{
-		ID:          convert.UUIDToString(r.ID),
+		ID:          convert.PostgresUUIDToUUID(r.ID),
 		Name:        r.Name,
 		Description: r.Description,
 		CreatedAt:   r.CreatedAt.Time,

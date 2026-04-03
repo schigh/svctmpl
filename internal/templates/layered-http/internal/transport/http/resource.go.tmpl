@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"[[ .ModulePath ]]/internal/model"
 )
@@ -55,10 +56,24 @@ func listResources(svc Service) http.HandlerFunc {
 	}
 }
 
+// parseUUID extracts and validates a UUID from the given string. On failure it
+// writes a 400 response and returns false.
+func parseUUID(w http.ResponseWriter, s string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "INVALID_ID", "invalid UUID format")
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
 // getResource returns a handler for GET /api/resources/{id}.
 func getResource(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id, ok := parseUUID(w, chi.URLParam(r, "id"))
+		if !ok {
+			return
+		}
 
 		res, err := svc.GetResource(r.Context(), id)
 		if err != nil {
@@ -73,7 +88,10 @@ func getResource(svc Service) http.HandlerFunc {
 // updateResource returns a handler for PUT /api/resources/{id}.
 func updateResource(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id, ok := parseUUID(w, chi.URLParam(r, "id"))
+		if !ok {
+			return
+		}
 
 		var req updateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -94,7 +112,10 @@ func updateResource(svc Service) http.HandlerFunc {
 // deleteResource returns a handler for DELETE /api/resources/{id}.
 func deleteResource(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id, ok := parseUUID(w, chi.URLParam(r, "id"))
+		if !ok {
+			return
+		}
 
 		err := svc.DeleteResource(r.Context(), id)
 		if err != nil {

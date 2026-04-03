@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"[[ .ModulePath ]]/internal/model"
 )
 
@@ -12,8 +14,8 @@ import (
 // consumer-defined interfaces.
 type ResourceRepository interface {
 	Create(ctx context.Context, r *model.Resource) (*model.Resource, error)
-	GetByID(ctx context.Context, id string) (*model.Resource, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*model.Resource, error)
 	List(ctx context.Context) ([]*model.Resource, error)
 	Update(ctx context.Context, r *model.Resource) (*model.Resource, error)
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/example/myservice/internal/errs"
 	"github.com/example/myservice/internal/model"
 )
@@ -34,7 +36,7 @@ func (s *ResourceService) CreateResource(ctx context.Context, name, description 
 }
 
 // GetResource retrieves a single resource by ID.
-func (s *ResourceService) GetResource(ctx context.Context, id string) (*model.Resource, error) {
+func (s *ResourceService) GetResource(ctx context.Context, id uuid.UUID) (*model.Resource, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
@@ -44,7 +46,7 @@ func (s *ResourceService) ListResources(ctx context.Context) ([]*model.Resource,
 }
 
 // UpdateResource validates input and delegates the update to the repository.
-func (s *ResourceService) UpdateResource(ctx context.Context, id, name, description string) (*model.Resource, error) {
+func (s *ResourceService) UpdateResource(ctx context.Context, id uuid.UUID, name, description string) (*model.Resource, error) {
 	if name == "" {
 		return nil, fmt.Errorf("%w: name is required", errs.ErrInvalid)
 	}
@@ -57,6 +59,6 @@ func (s *ResourceService) UpdateResource(ctx context.Context, id, name, descript
 }
 
 // DeleteResource removes a resource by ID.
-func (s *ResourceService) DeleteResource(ctx context.Context, id string) error {
+func (s *ResourceService) DeleteResource(ctx context.Context, id uuid.UUID) error {
 	return s.repo.Delete(ctx, id)
 }

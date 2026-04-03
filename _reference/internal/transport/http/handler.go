@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/example/myservice/internal/model"
@@ -16,10 +17,10 @@ import (
 // rather than the implementor (service package).
 type Service interface {
 	CreateResource(ctx context.Context, name, description string) (*model.Resource, error)
-	GetResource(ctx context.Context, id string) (*model.Resource, error)
+	GetResource(ctx context.Context, id uuid.UUID) (*model.Resource, error)
 	ListResources(ctx context.Context) ([]*model.Resource, error)
-	UpdateResource(ctx context.Context, id, name, description string) (*model.Resource, error)
-	DeleteResource(ctx context.Context, id string) error
+	UpdateResource(ctx context.Context, id uuid.UUID, name, description string) (*model.Resource, error)
+	DeleteResource(ctx context.Context, id uuid.UUID) error
 }
 
 // DBPinger is satisfied by any type that can verify database connectivity.
